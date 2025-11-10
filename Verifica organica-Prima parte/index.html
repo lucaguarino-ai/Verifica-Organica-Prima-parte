@@ -1,0 +1,1651 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Verifica di chimica organica - Alcani, Alcheni, Alchini</title>
+<style>
+  :root{
+    --verde:#2e7d32; --accent:#388e3c; --bg:#e8f5e9; --bordo:#2e7d32;
+    --rosso:#d32f2f; --ombra:rgba(0,0,0,0.15);
+  }
+  body{ background:var(--bg); color:#0b3d0b; font-family:Arial, sans-serif; margin:0; padding:20px; }
+  h1{ text-align:center; margin:10px 0 16px; }
+  .section{ background:#fff; border:2px solid var(--bordo); border-radius:10px; padding:12px; margin:12px auto; width:95%; max-width:1100px; box-shadow:0 4px 10px var(--ombra);}
+  button{ background:var(--verde); color:#fff; border:none; border-radius:6px; padding:8px 12px; margin:4px; cursor:pointer; }
+  button:hover{ background:var(--accent); }
+  button.active{ outline:2px solid var(--accent); }
+  button.danger{ outline:2px solid var(--rosso); }
+  input, textarea{ padding:8px; border:1px solid #a5d6a7; border-radius:6px; }
+  .row{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .space-between{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .toolbar{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:center; margin:8px 0; }
+  .toolbar.leftAlign{ justify-content:flex-start; }
+  .indicator{ font-weight:bold; }
+  .swatch{ width:28px; height:28px; border-radius:50%; border:2px solid #fff; outline:1px solid #333; cursor:pointer; }
+  .swatch.sel{ box-shadow:0 0 0 2px #fff, 0 0 0 4px var(--accent) inset; }
+
+  .numBtn{
+    background:var(--verde); color:#fff; width:30px; height:30px;
+    border-radius:50%; font-weight:bold;
+  }
+
+  .stage{ position:relative; border:2px solid var(--bordo); background:#fff; border-radius:10px; overflow:hidden; box-shadow:0 2px 6px var(--ombra);}
+  #stage1{ display:block; margin:0 auto; }
+  canvas{ display:block; }
+  #bg1{ position:relative; z-index:1; }
+  #strokes1{ position:absolute; inset:0; z-index:2; cursor:crosshair; }
+  #nums1{ position:absolute; inset:0; z-index:3; }
+  #cursor1{ position:absolute; inset:0; z-index:4; pointer-events:none; }
+
+  /* Sezione 2 */
+  #costruWrapper{
+    position:relative; display:block; border:2px solid var(--bordo);
+    border-radius:10px; background:#fff; overflow:hidden; box-shadow:0 2px 6px var(--ombra);
+    width:800px; height:500px; margin:0 auto;
+  }
+  #costruCanvas{ display:block; margin:0 auto; }
+  #costruCursor{ position:absolute; left:0; top:0; pointer-events:none; }
+
+  .badge{ display:inline-block; padding:2px 8px; border-radius:14px; color:#fff; font-size:12px; }
+  .ok{ background:#2e7d32; } .warn{ background:#ff9800; } .err{ background:#c62828; }
+  .card{ border:1px solid #cde4cf; border-radius:8px; padding:10px; margin:10px 0; display:flex; gap:10px; flex-wrap:wrap; background:#fff; }
+  .card img{ width:180px; border:1px solid #2e7d32; border-radius:6px; box-shadow:0 1px 4px var(--ombra); }
+  .card .wide img{ width:auto; max-width:360px; }
+  .mini{ opacity:.9; margin-top:4px; }
+
+  #studentInfoBar{
+    display:none; text-align:center; font-weight:bold; background:#c8e6c9;
+    border:2px solid var(--bordo); border-radius:10px; padding:6px; margin:8px auto;
+    width:95%; max-width:1100px;
+  }
+
+  #studentSection{ max-width:820px; }
+  #studentSection .row{ justify-content:center; }
+  #studentSection input{ min-width:160px; }
+  input.small-note{display:block; margin:10px auto 0;}
+
+  /* Caselle testo riepilogo */
+  .ansFieldWrap{ margin-top:6px; display:flex; flex-direction:column; gap:4px; }
+  .ansLabel{ font-size:12px; color:#1b5e20; }
+  .ansInput{
+    width: min(420px, 95%);
+    padding:6px 8px;
+    border:1px solid #a5d6a7;
+    border-radius:6px;
+    background:#f8fff8;
+    color:#0b3d0b;
+  }
+
+  @media print{
+    #studentSection, #sezione1, #sezione2, #studentInfoBar { display:none !important; }
+    body{ background:#fff; }
+    .section{ border:none; box-shadow:none; }
+  }
+</style>
+</head>
+<body>
+<h1>Verifica di chimica organica – Alcani, Alcheni, Alchini</h1>
+<div id="studentInfoBar"></div>
+
+<!-- DATI STUDENTE -->
+<div class="section" id="studentSection">
+  <div class="row">
+    <input id="nome" placeholder="Nome">
+    <input id="cognome" placeholder="Cognome">
+    <input id="classe" placeholder="Classe">
+    <input id="data" readonly title="Data (auto)">
+  </div>
+  <div class="space-between" style="justify-content:center;">
+    <span id="oraInfo"></span>
+    <button id="iniziaBtn">Inizia Verifica</button>
+  </div>
+</div>
+
+<!-- SEZIONE 1 -->
+<div class="section" id="sezione1" style="display:none;">
+  <h3>Sezione 1 – Annota la molecola</h3>
+  <div class="toolbar">
+    <button id="penBtn" aria-pressed="false">✏️ Penna</button>
+    <div id="palette" class="row">
+      <div class="swatch sel" data-col="#000000" style="background:#000000;"></div>
+      <div class="swatch" data-col="#d32f2f" style="background:#d32f2f;"></div>
+      <div class="swatch" data-col="#1e88e5" style="background:#1e88e5;"></div>
+      <div class="swatch" data-col="#2e7d32" style="background:#2e7d32;"></div>
+      <div class="swatch" data-col="#f57c00" style="background:#f57c00;"></div>
+    </div>
+    <button id="eraserBtn" aria-pressed="false">🩹 Gomma</button>
+    <button id="clearBtn">🗑️ Pulisci</button>
+  </div>
+
+  <div class="toolbar">
+    <span><strong>Numerazione:</strong></span>
+    <div class="row" id="numsToolbar1">
+      <button class="numBtn">1</button><button class="numBtn">2</button><button class="numBtn">3</button><button class="numBtn">4</button>
+      <button class="numBtn">5</button><button class="numBtn">6</button><button class="numBtn">7</button><button class="numBtn">8</button>
+    </div>
+  </div>
+
+  <div class="stage" id="stage1" style="width:500px;height:500px;">
+    <canvas id="bg1" width="500" height="500"></canvas>
+    <canvas id="strokes1" width="500" height="500"></canvas>
+    <canvas id="nums1" width="500" height="500"></canvas>
+    <canvas id="cursor1" width="500" height="500"></canvas>
+  </div>
+
+  <input type="text" id="nomenclatureInput" class="small-note" placeholder="Scrivi la nomenclatura (facoltativo)">
+  <div class="space-between" style="margin-top:8px;">
+    <button id="prevMol">⟵ Indietro</button>
+    <div class="indicator" id="molIndicator">Molecola 1 di 5</div>
+    <button id="nextMol">Avanti ⟶</button>
+  </div>
+</div>
+
+<!-- SEZIONE 2 -->
+<div class="section" id="sezione2" style="display:none;">
+  <h3>Sezione 2 – Costruisci la molecola a partire dalla nomenclatura</h3>
+  <p id="domandaText" class="indicator"></p>
+
+  <div id="costruBlock">
+    <div id="costruWrapper">
+      <canvas id="costruCanvas" width="800" height="500"></canvas>
+      <canvas id="costruCursor" width="800" height="500"></canvas>
+    </div>
+
+    <div id="tools2" class="toolbar leftAlign">
+      <div class="row">
+        <!-- Atomi e gruppi -->
+        <button class="add2" data-kind="C">C</button>
+        <button class="add2" data-kind="H">H</button>
+        <button class="add2" data-kind="F">F</button>
+        <button class="add2" data-kind="Cl">Cl</button>
+        <button class="add2" data-kind="I">I</button>
+        <button class="add2" data-kind="Br">Br</button>
+        <button class="add2" data-kind="CH">CH</button>
+        <button class="add2" data-kind="CH2">CH₂</button>
+        <button class="add2" data-kind="CH3">CH₃</button>
+
+        <!-- Cicloesano -->
+        <button id="addBoat2">Cicloesano</button>
+
+        <!-- Legami (ordine) -->
+        <button class="add2" data-kind="bond-">Legame —</button>
+        <button class="add2" data-kind="bondV">Legame |</button>
+        <button class="add2" data-kind="bond=">Legame =</button>
+        <button class="add2" data-kind="bond≡">Legame ≡</button>
+
+        <button id="rotCCW2">↺ −15°</button>
+        <button id="rotCW2">↻ +15°</button>
+
+        <!-- Utilità -->
+        <button id="togglePorts2">Porte on/off</button>
+        <button id="eraser2">🩹 Gomma</button>
+        <button id="clear2">🗑️ Pulisci</button>
+
+        <!-- Numerazione sezione 2 -->
+        <span style="margin-left:8px;"><strong>Numerazione:</strong></span>
+        <div class="row" id="numsToolbar2">
+          <button class="numBtn num2">1</button><button class="numBtn num2">2</button><button class="numBtn num2">3</button><button class="numBtn num2">4</button>
+          <button class="numBtn num2">5</button><button class="numBtn num2">6</button><button class="numBtn num2">7</button><button class="numBtn num2">8</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="space-between">
+    <div>
+      <button id="prevQ">⟵ Indietro</button>
+      <span id="qIndicator" class="indicator">Domanda 1 di 3</span>
+      <button id="nextQ">Avanti ⟶</button>
+    </div>
+    <div><button id="consegnaBtn">Consegna verifica</button></div>
+  </div>
+</div>
+
+<!-- RIEPILOGO -->
+<div class="section" id="resultSection" style="display:none;">
+  <h3>Riepilogo verifica</h3>
+  <div id="anagrafica"></div><hr/>
+  <h4>Sezione 1 – Annotazione</h4><div id="riepilogoAnnota"></div>
+  <h4>Sezione 2 – Costruzione</h4><div id="riepilogoCostru"></div>
+  <h4>Totale</h4><div id="totali"></div>
+  <div class="space-between"><span></span><button onclick="window.print()">📄 Esporta PDF</button></div>
+</div>
+
+<script>
+/* ===== Utility ===== */
+function esc(s){return (s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+function pad(n){return String(n).padStart(2,'0');}
+function fmtHMS(ms){const s=Math.floor(ms/1000);const h=Math.floor(s/3600);const m=Math.floor((s%3600)/60);const ss=s%60;return pad(h)+':'+pad(m)+':'+pad(ss);}
+
+/* ===== Data e orari ===== */
+const today = new Date();
+const dataEl=document.getElementById('data');
+if(dataEl) dataEl.value = today.toLocaleDateString('it-IT',{year:'numeric',month:'2-digit',day:'2-digit'});
+let startTime=null,endTime=null,timerInt=null;
+const studentInfoBar=document.getElementById('studentInfoBar');
+const fmtTime=d=>d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
+
+/* ===== Avvio verifica ===== */
+document.getElementById('iniziaBtn').addEventListener('click', ()=>{
+  const nome=document.getElementById('nome').value.trim();
+  const cognome=document.getElementById('cognome').value.trim();
+  const classe=document.getElementById('classe').value.trim();
+  if(!nome||!cognome||!classe){alert('Compila Nome, Cognome e Classe.');return;}
+  startTime=new Date();
+
+  studentInfoBar.innerHTML=`Studente: <strong>${esc(nome)} ${esc(cognome)}</strong> — Classe: ${esc(classe)} — Data: ${dataEl.value} — Inizio: ${fmtTime(startTime)} — <span id="liveTimer">Tempo trascorso: 00:00:00</span>`;
+  studentInfoBar.style.display='block';
+
+  const liveTimer=document.getElementById('liveTimer');
+  timerInt=setInterval(()=>{ liveTimer.textContent='Tempo trascorso: '+fmtHMS(Date.now()-startTime.getTime()); },1000);
+
+  document.getElementById('studentSection').style.display='none';
+  document.getElementById('sezione1').style.display='block';
+  document.getElementById('sezione2').style.display='block';
+
+  loadMolecule(0);
+  window.setQuestion && window.setQuestion(0);
+});
+</script>
+
+<script>
+/* ===== Sezione 1 ===== */
+const molFiles=["alcano.jpg","alchene.jpg","alchino.jpg","diene.jpg","benzene.jpg"];
+const correctNames={
+  "alcano.jpg":"3,5 dietil-3,5 dimetilottano",
+  "alchene.jpg":"5 etil-3 metil-4 ottene",
+  "alchino.jpg":"4 Br-6 Cl-4 etil-2 eptino",
+  "diene.jpg":"trans 3 Cl-4 etil-3 eptene",
+  "benzene.jpg":"4 Br-2 Cl-1 etilcicloesano"
+};
+const correctImagesAnnota={
+  "alcano.jpg":"alcano_corretto.png",
+  "alchene.jpg":"alchene_corretto.png",
+  "alchino.jpg":"alchino_corretto.png",
+  "diene.jpg":"diene_corretto.png",
+  "benzene.jpg":"benzene_corretto.png"
+};
+
+/* Pesi/chiavi globali per il riepilogo */
+window.W_TEXT = 1.0;
+window.W_VIS  = 1.0;
+window.answerKeys = {
+  "alcano.jpg":  { mask: correctImagesAnnota["alcano.jpg"],  numbers: [], tol: 16 },
+  "alchene.jpg": { mask: correctImagesAnnota["alchene.jpg"], numbers: [], tol: 16 },
+  "alchino.jpg": { mask: correctImagesAnnota["alchino.jpg"], numbers: [], tol: 16 },
+  "diene.jpg":   { mask: correctImagesAnnota["diene.jpg"],   numbers: [], tol: 16 },
+  "benzene.jpg": { mask: correctImagesAnnota["benzene.jpg"], numbers: [], tol: 16 }
+};
+
+let molIdx=0;
+const molIndicator=document.getElementById('molIndicator');
+const nomeInput=document.getElementById('nomenclatureInput');
+
+const bg1=document.getElementById('bg1');
+const strokes1=document.getElementById('strokes1');
+const nums1=document.getElementById('nums1');
+const cursor1=document.getElementById('cursor1');
+const bg=bg1.getContext('2d');
+const sctx=strokes1.getContext('2d');
+const nctx=nums1.getContext('2d');
+const cctx=cursor1.getContext('2d');
+const stage1=document.getElementById('stage1');
+sctx.lineJoin='round'; sctx.lineCap='round';
+
+/* Stato strumenti */
+let penColor='#000000';
+let tool1='none'; // 'pen' | 'eraser' | 'none'
+let mode1='draw'; // 'draw' | 'moveNums'
+let drawing1=false,erasing1=false;
+let numbers=[]; // [{x,y,text}]
+let draggingNum=null;
+
+const eraserBtn1=document.getElementById('eraserBtn');
+const penBtn1=document.getElementById('penBtn');
+function setTool1(t){
+  tool1=t;
+  mode1 = (t==='pen' || t==='eraser') ? 'draw' : mode1;
+  penBtn1.classList.toggle('danger',  t==='pen');
+  eraserBtn1.classList.toggle('danger', t==='eraser');
+}
+function disableToolsForNumbers(){
+  tool1='none';
+  mode1='moveNums';
+  penBtn1.classList.remove('danger');
+  eraserBtn1.classList.remove('danger');
+}
+penBtn1.addEventListener('click',()=>{ setTool1(tool1==='pen' ? 'none' : 'pen'); });
+eraserBtn1.addEventListener('click',()=>{ setTool1(tool1==='eraser' ? 'none' : 'eraser'); });
+
+document.querySelectorAll('#palette .swatch').forEach(s=>{
+  s.addEventListener('click',()=>{
+    document.querySelectorAll('#palette .swatch').forEach(x=>x.classList.remove('sel'));
+    s.classList.add('sel');
+    penColor=s.dataset.col;
+  });
+});
+document.getElementById('clearBtn').addEventListener('click',()=>{
+  sctx.clearRect(0,0,strokes1.width,strokes1.height);
+  numbers=[]; renderNumbers(); saveAnnotaForKey(currentKey());
+});
+
+/* posizioni griglia per numeri */
+function nextGridPos(canvasWidth, margin=30, step=28, count=0){
+  const cols = Math.max(1, Math.floor((canvasWidth - 2*margin)/step));
+  const col = count % cols;
+  const row = Math.floor(count / cols);
+  return { x: margin + col*step, y: margin + row*step };
+}
+
+/* ====== SALVATAGGIO ISOLATO PER IMMAGINE ====== */
+function currentKey(){ return 'annota_' + (molFiles[molIdx] || ''); }
+function saveAnnotaForKey(keyOverride){
+  const key = keyOverride || currentKey();
+  const data = {
+    strokes: strokes1.toDataURL('image/png'),
+    numbers: numbers.map(n => ({x:n.x, y:n.y, text:n.text})),
+    text: (nomeInput.value || '')
+  };
+  localStorage.setItem(key, JSON.stringify(data));
+}
+function loadAnnotaForKey(key){
+  try{
+    const raw = localStorage.getItem(key);
+    if(!raw) return {strokes:'', numbers:[], text:''};
+    const parsed = JSON.parse(raw);
+    return {
+      strokes: parsed.strokes || '',
+      numbers: Array.isArray(parsed.numbers) ? parsed.numbers.map(n=>({x:+n.x,y:+n.y,text:String(n.text||'')})) : [],
+      text: String(parsed.text || '')
+    };
+  }catch(_){ return {strokes:'', numbers:[], text:''}; }
+}
+function applyLoadedState(state){
+  draggingNum=null; drawing1=false; erasing1=false;
+  sctx.clearRect(0,0,strokes1.width,strokes1.height);
+  nctx.clearRect(0,0,nums1.width,nums1.height);
+  cctx.clearRect(0,0,cursor1.width,cursor1.height);
+  nomeInput.value = state.text || '';
+  if(state.strokes){
+    const si=new Image(); si.onload=()=>sctx.drawImage(si,0,0); si.src=state.strokes;
+  }
+  numbers = state.numbers.map(n=>({x:n.x,y:n.y,text:n.text}));
+  renderNumbers();
+}
+function saveCurrentMolecule(){ saveAnnotaForKey(currentKey()); }
+
+nomeInput.addEventListener('input',()=>{ saveAnnotaForKey(currentKey()); });
+document.querySelectorAll('#numsToolbar1 .numBtn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    const p = nextGridPos(nums1.width, 30, 28, numbers.length);
+    numbers.push({x:p.x,y:p.y,text:btn.textContent});
+    renderNumbers(); saveAnnotaForKey(currentKey());
+  });
+});
+
+function resizeStage(w,h){
+  stage1.style.width=w+'px'; stage1.style.height=h+'px';
+  [bg1,strokes1,nums1,cursor1].forEach(c=>{c.width=w; c.height=h;});
+  nomeInput.style.width=w+'px';
+}
+
+function loadMolecule(idx){
+  molIdx=idx;
+  const file=molFiles[molIdx];
+  const img=new Image();
+  img.onload=()=>{
+    resizeStage(img.width,img.height);
+    bg.clearRect(0,0,bg1.width,bg1.height);
+    bg.drawImage(img,0,0);
+    const state = loadAnnotaForKey(currentKey());
+    applyLoadedState(state);
+  };
+  img.onerror=()=>{
+    resizeStage(600,400);
+    bg.fillStyle='#c62828'; bg.font='16px Arial';
+    bg.fillText('Immagine non trovata: '+file,20,30);
+    const state = loadAnnotaForKey(currentKey());
+    applyLoadedState(state);
+  };
+  img.src=file;
+  molIndicator.textContent=`Molecola ${molIdx+1} di ${molFiles.length}`;
+}
+document.getElementById('prevMol').addEventListener('click',()=>{ if(molIdx>0){ saveCurrentMolecule(); loadMolecule(molIdx-1); } });
+document.getElementById('nextMol').addEventListener('click',()=>{ if(molIdx<molFiles.length-1){ saveCurrentMolecule(); loadMolecule(molIdx+1); } });
+
+function renderNumbers(){
+  nctx.clearRect(0,0,nums1.width,nums1.height);
+  nctx.fillStyle= '#2e7d32';
+  nctx.font='bold 16px Arial';
+  numbers.forEach(n=>nctx.fillText(n.text,n.x-4,n.y+6));
+}
+function posOn(canvas,e){
+  const r=canvas.getBoundingClientRect();
+  const x=(e.touches?e.touches[0].clientX:e.clientX)-r.left;
+  const y=(e.touches?e.touches[0].clientY:e.clientY)-r.top;
+  return {x,y};
+}
+function drawCursor1(x,y,show){
+  cctx.clearRect(0,0,cursor1.width,cursor1.height);
+  if(!show || mode1!=='draw' || tool1!=='eraser')return;
+  const rad = 9;
+  cctx.beginPath(); cctx.arc(x,y,rad,0,Math.PI*2);
+  cctx.strokeStyle='rgba(76,175,80,0.9)';
+  cctx.lineWidth=2; cctx.stroke();
+}
+function eraseOnStrokes(x,y){
+  const r=9;
+  sctx.save();
+  sctx.globalCompositeOperation='destination-out';
+  sctx.beginPath(); sctx.arc(x,y,r,0,Math.PI*2); sctx.fill();
+  sctx.restore();
+}
+function eraseNumbersAt(x,y){
+  const r=9;
+  const before=numbers.length;
+  numbers=numbers.filter(n=>Math.hypot(n.x-x,n.y-y)>r);
+  if(numbers.length!==before){ renderNumbers(); saveAnnotaForKey(currentKey()); }
+}
+function addDrawListeners(layer){
+  layer.addEventListener('mousedown',e=>{
+    if(mode1!=='draw') return;
+    const p=posOn(layer,e);
+    if(tool1==='pen'){drawing1=true; sctx.beginPath(); sctx.moveTo(p.x,p.y);}
+    else if(tool1==='eraser'){erasing1=true; drawCursor1(p.x,p.y,true); eraseOnStrokes(p.x,p.y); eraseNumbersAt(p.x,p.y);}
+  });
+  layer.addEventListener('mousemove',e=>{
+    if(mode1!=='draw') return;
+    const p=posOn(layer,e);
+    if(drawing1&&tool1==='pen'){sctx.lineWidth=2; sctx.strokeStyle=penColor; sctx.lineTo(p.x,p.y); sctx.stroke(); sctx.beginPath(); sctx.moveTo(p.x,p.y);}
+    else if(erasing1&&tool1==='eraser'){drawCursor1(p.x,p.y,true); eraseOnStrokes(p.x,p.y); eraseNumbersAt(p.x,p.y);}
+  });
+  ['mouseup','mouseleave'].forEach(ev=>layer.addEventListener(ev,()=>{
+    if(drawing1){drawing1=false; saveAnnotaForKey(currentKey());}
+    if(erasing1){erasing1=false; drawCursor1(0,0,false); saveAnnotaForKey(currentKey());}
+  }));
+}
+addDrawListeners(strokes1);
+addDrawListeners(nums1);
+
+/* drag numeri */
+function hitNum(x,y){for(let i=numbers.length-1;i>=0;i--){const n=numbers[i]; if(Math.hypot(n.x-x,n.y-y)<=14) return n;} return null;}
+nums1.addEventListener('mousedown',e=>{
+  const p=posOn(nums1,e);
+  const n=hitNum(p.x,p.y);
+  if(n){ disableToolsForNumbers(); draggingNum=n; }
+});
+nums1.addEventListener('mousemove',e=>{
+  if(mode1!=='moveNums' || !draggingNum) return;
+  const p=posOn(nums1,e);
+  draggingNum.x=p.x; draggingNum.y=p.y; renderNumbers();
+});
+['mouseup','mouseleave'].forEach(ev=>nums1.addEventListener(ev,()=>{
+  if(draggingNum){ draggingNum=null; saveAnnotaForKey(currentKey()); }
+}));
+</script>
+
+<script>
+/* ===== Sezione 2: Costruzione + Snap + Numerazione + Revive & Sanitize ===== */
+(() => {
+  const costruCanvas = document.getElementById('costruCanvas');
+  const costruCursor = document.getElementById('costruCursor');
+  if (!costruCanvas || !costruCursor) return;
+
+  const ctx = costruCanvas.getContext('2d');
+  const cur = costruCursor.getContext('2d');
+
+  let pieces = [];
+  let numbers2 = [];
+  let dragNum2 = null;
+  let nextId = 1, nextGroupId = 1;
+  let drag = null;
+  let selected = null;
+  let eraser = false, erasingHeld = false;
+  let showPorts = false;
+
+  const SPAWN = {
+    'C':   {x:  20, y:  36}, 'H':   {x:  80, y:  36}, 'F':   {x: 140, y:  36}, 'Cl':  {x: 200, y:  36},
+    'I':   {x: 260, y:  36}, 'Br':  {x: 320, y:  36}, 'CH':  {x: 380, y:  36}, 'CH2': {x: 440, y:  36}, 'CH3': {x: 500, y:  36},
+    'bond-': {x: 560, y:  34}, 'bondV': {x: 620, y: 34}, 'bond=': {x: 680, y: 34}, 'bond≡': {x: 740, y: 34},
+    'boat':{x:  20, y:  76}
+  };
+
+  const questions = [
+    {testo:"Costruisci: 3,3-dibromo-1,1,5,5-tetracloropentano",correctImg:"costruzione_1_corretto.png",expected:{C:5,H:12,Br:2,Cl:4,F:0,I:0,bonds:"———==" }},
+    {testo:"Costruisci: 1-cloro-4,4-dimetil-2-esino",correctImg:"costruzione_2_corretto.png",expected:{C:8,H:14,Br:0,Cl:1,F:0,I:0,bonds:"—≡" }},
+    {testo:"Costruisci: 1-bromo-3-etil-4-metil-3-esene",correctImg:"costruzione_3_corretto.png",expected:{C:9,H:18,Br:1,Cl:0,F:0,I:0,bonds:"—=" }}
+  ];
+  let qIndex=0;
+  const domandaText=document.getElementById('domandaText');
+  const qIndicator=document.getElementById('qIndicator');
+  function setQuestion(i){
+    qIndex=i;
+    if(domandaText) domandaText.textContent=questions[qIndex].testo;
+    if(qIndicator) qIndicator.textContent=`Domanda ${qIndex+1} di ${questions.length}`;
+    loadWorkForQuestion();
+  }
+  function keyQ(i){ return 'build_q_'+i; }
+
+  const ATOM_COLOR='#000';
+  const FONT='20px Arial';
+  const SNAP_DIST = 2.2;
+  const SOFT_SNAP_DIST = 10;
+  const BOND_LEN = 26;
+  const DIRS=['N','S','E','W','A1','A2','A3','A4','A5','A6','EQ1','EQ2','EQ3','EQ4','EQ5','EQ6'];
+  const isBond = (p)=> p && (p.kind==='bond-' || p.kind==='bond=' || p.kind==='bond≡' || p.kind==='bondV');
+
+  function labelOf(kind){
+    if (kind==='bond-') return '—';
+    if (kind==='bond=') return '=';
+    if (kind==='bond≡') return '≡';
+    if (kind==='bondV') return '|';
+    if (kind==='CH2') return 'CH₂';
+    if (kind==='CH3') return 'CH₃';
+    return kind;
+  }
+  function emptyPorts(){ const o={}; DIRS.forEach(d=>o[d]='none'); return o; }
+
+  function measurePiece(p){
+    ctx.font=FONT;
+    if (p.kind==='boat') return {w: 520, h: 360};
+    const lab=labelOf(p.kind);
+    const isBondKind = (p.kind==='bond-' || p.kind==='bond=' || p.kind==='bond≡' || p.kind==='bondV');
+    const padX = isBondKind ? 1 : 4;
+    const padY = isBondKind ? 4 : 6;
+
+    if (p.kind==='bondV'){
+      const w = Math.max(14, ctx.measureText(lab).width + padX*2);
+      const h = BOND_LEN;
+      return { w, h };
+    }
+    if (p.kind==='bond-' || p.kind==='bond=' || p.kind==='bond≡'){
+      const w = BOND_LEN;
+      const h = Math.max(22, 20 + padY*2);
+      return { w, h };
+    }
+    const w=ctx.measureText(lab).width + padX*2;
+    const h=20 + padY*2;
+    return {w: Math.max(22, w), h: Math.max(22, h)};
+  }
+
+  function initConnections(obj){
+    obj.id = nextId++;
+    const engaged={}, connections={};
+    DIRS.forEach(d=>{ engaged[d]=false; connections[d]=null; });
+    obj.engaged=engaged; obj.connections=connections; obj.groupId = (obj.groupId ?? nextGroupId++);
+    obj.angle = isBond(obj) ? (obj.angle ?? 0) : 0;
+    return obj;
+  }
+
+  function createAtom(kind){
+    const base={kind}; const sz=measurePiece(base);
+    const conn=emptyPorts();
+    conn.N=conn.S=conn.E=conn.W='female';
+    const sp = SPAWN[kind] || {x:20,y:36};
+    return initConnections({...base, x:sp.x, y:sp.y, w:sz.w, h:sz.h, connectors:conn});
+  }
+  const createCH  = () => createAtom('CH');
+  const createCH2 = () => createAtom('CH2');
+  const createCH3 = () => createAtom('CH3');
+
+  function createBoat(){
+    const base={kind:'boat'}; const sz=measurePiece(base); const conn=emptyPorts();
+    ['A1','A2','A3','A4','A5','A6','EQ1','EQ2','EQ3','EQ4','EQ5','EQ6'].forEach(k=>conn[k]='female');
+    const sp = SPAWN['boat'] || {x:20,y:76};
+    return initConnections({...base, x:sp.x, y:sp.y, w:sz.w, h:sz.h, connectors:conn});
+  }
+  function createBond(kind){
+    const base={kind}; const sz=measurePiece(base); const conn=emptyPorts();
+    if (kind==='bondV'){ conn.N='male'; conn.S='male'; } else { conn.E='male'; conn.W='male'; }
+    const sp = SPAWN[kind] || {x:20,y:36};
+    return initConnections({...base, x:sp.x, y:sp.y, w:sz.w, h:sz.h, connectors:conn});
+  }
+  function createStandard(kind){
+    if (kind==='CH')  return createCH();
+    if (kind==='CH2') return createCH2();
+    if (kind==='CH3') return createCH3();
+    return createAtom(kind);
+  }
+
+  function rotatePoint(px,py,cx,cy,angle){
+    if (!angle) return {x:px,y:py};
+    const rad=angle*Math.PI/180, dx=px-cx, dy=py-cy;
+    return { x: cx + dx*Math.cos(rad) - dy*Math.sin(rad) + 0, y: cy + dx*Math.sin(rad) + dy*Math.cos(rad) + 0 };
+  }
+
+  function boatVertices(a){
+    const x=a.x, y=a.y, w=a.w, h=a.h;
+    const v1={x:x+40,  y:y+135};
+    const v2={x:x+140, y:y+60};
+    const v3={x:x+260, y:y+95};
+    const v4={x:x+395, y:y+180};
+    const v5={x:x+300, y:y+235};
+    const v6={x:x+170, y:y+205};
+    return [v1,v2,v3,v4,v5,v6];
+  }
+  function boatPorts(a){
+    const vs=boatVertices(a); const off=5;
+    const A = [
+      {x:vs[0].x, y:vs[0].y+off},{x:vs[1].x, y:vs[1].y-off},{x:vs[2].x, y:vs[2].y+off},
+      {x:vs[3].x, y:vs[3].y-off},{x:vs[4].x, y:vs[4].y+off},{x:vs[5].x, y:vs[5].y-off}
+    ];
+    const EQ = [
+      {x:vs[0].x-off, y:vs[0].y+1},{x:vs[1].x-off, y:vs[1].y-1},{x:vs[2].x+off, y:vs[2].y},
+      {x:vs[3].x+off, y:vs[3].y+1},{x:vs[4].x+off, y:vs[4].y+1},{x:vs[5].x-off, y:vs[5].y+1}
+    ];
+    return {A,EQ};
+  }
+
+  function getPorts(a){
+    const ports={};
+    if (a.kind==='boat'){
+      const {A,EQ}=boatPorts(a);
+      for(let i=0;i<6;i++) ports['A'+(i+1)]={x:A[i].x,y:A[i].y,side:'A'+(i+1)};
+      for(let i=0;i<6;i++) ports['EQ'+(i+1)]={x:EQ[i].x,y:EQ[i].y,side:'EQ'+(i+1)};
+      return ports;
+    }
+    const cx=a.x+a.w/2, cy=a.y+a.h/2;
+    const base = {
+      N:{x:a.x+a.w*0.5,y:a.y},
+      S:{x:a.x+a.w*0.5,y:a.y+a.h},
+      E:{x:a.x+a.w,    y:a.y+a.h*0.5},
+      W:{x:a.x,        y:a.y+a.h*0.5},
+    };
+    for (const d of ['N','S','E','W']){
+      if ((a.connectors?.[d]||'none')==='none') continue;
+      const pt = base[d];
+      if (isBond(a) && a.angle){
+        const r=rotatePoint(pt.x,pt.y,cx,cy,a.angle); ports[d]={x:r.x,y:r.y,side:d};
+      } else {
+        ports[d]={x:pt.x,y:pt.y,side:d};
+      }
+    }
+    return ports;
+  }
+
+  function groupMembers(gid){ return pieces.filter(p=>p.groupId===gid); }
+  function findIndexById(id){ return pieces.findIndex(p => p.id === id); }
+
+  function connectedComponentForPiece(A){
+    const compIds = new Set([A.id]);
+    const queue = [A.id];
+    while(queue.length){
+      const id = queue.shift();
+      const i = findIndexById(id);
+      if (i < 0) continue;
+      const P = pieces[i];
+      for (const k of DIRS){
+        const c = P.connections?.[k];
+        if (!c) continue;
+        const j = findIndexById(c.peerId);
+        if (j < 0) continue;
+        const pid = pieces[j].id;
+        if (!compIds.has(pid)){
+          compIds.add(pid);
+          queue.push(pid);
+        }
+      }
+    }
+    return pieces.filter(p => compIds.has(p.id));
+  }
+
+  function wouldCollideGroup(gid,dx,dy,ignorePeerId,ignoreGroupId){
+    const members=groupMembers(gid);
+    for (const A of members){
+      const Ax=A.x+dx, Ay=A.y+dy, Aw=A.w, Ah=A.h;
+      for (const B of pieces){
+        if (B.groupId===gid) continue;
+        if (ignorePeerId && B.id===ignorePeerId) continue;
+        if (ignoreGroupId && B.groupId===ignoreGroupId) continue;
+        if (Ax < B.x + B.w && Ax + Aw > B.x && Ay < B.y + B.h && Ay + Ah > B.y) return true;
+      }
+    }
+    return false;
+  }
+  function translateGroup(gid,dx,dy){ pieces.forEach(p=>{ if(p.groupId===gid){ p.x+=dx; p.y+=dy; }}); }
+  function isComplement(a,b){ return (a==='male'&&b==='female')||(a==='female'&&b==='male'); }
+
+  function portPairs(ownerA, ownerB){
+    const A = getPorts(ownerA), B = getPorts(ownerB);
+    const out = [];
+    for (const ka in A){
+      if (ownerA.engaged[ka]) continue;
+      const typeA = ownerA.connectors?.[ka] || 'none';
+      if (typeA==='none') continue;
+      for (const kb in B){
+        if (ownerB.engaged[kb]) continue;
+        const typeB = ownerB.connectors?.[kb] || 'none';
+        if (typeB==='none') continue;
+        if (isComplement(typeA,typeB)) out.push({aKey:ka, aPt:A[ka], bKey:kb, bPt:B[kb]});
+      }
+    }
+    return out;
+  }
+  function effectiveSnapRadius(a, b){
+    const bondish = isBond(a) || isBond(b);
+    const rotated = (isBond(a) && (a.angle||0)%360 !== 0) || (isBond(b) && (b.angle||0)%360 !== 0);
+    const boatish = (a.kind==='boat' || b.kind==='boat');
+    if (rotated) return Math.max(SOFT_SNAP_DIST, 10);
+    return (bondish || boatish) ? SOFT_SNAP_DIST : SNAP_DIST;
+  }
+
+  let snapEffects = [];
+  let animating = false;
+  function addSnapEffect(x,y){ snapEffects.push({x,y,start:performance.now()}); if(!animating){ animating=true; requestAnimationFrame(tick);} }
+  function tick(ts){
+    draw(ts);
+    const stillFx = snapEffects.length>0;
+    const stillRing = eraser && erasingHeld;
+    if (stillFx || stillRing){ requestAnimationFrame(tick); } else { animating=false; }
+  }
+
+  function mergeGroups(gKeep,gMove){ if(gKeep===gMove) return; pieces.forEach(p=>{ if(p.groupId===gMove) p.groupId=gKeep; }); }
+  function rebuildGroups(){
+    const n=pieces.length, visited=new Array(n).fill(false);
+    for (let i=0;i<n;i++){
+      if (visited[i]) continue;
+      const q=[i]; visited[i]=true; const members=[i];
+      while(q.length){
+        const u=q.shift(); const U=pieces[u];
+        for (const k of DIRS){
+          const c=U.connections[k]; if(!c) continue;
+          const v=pieces.findIndex(pp=>pp.id===c.peerId);
+          if (v<0 || visited[v]) continue;
+          visited[v]=true; q.push(v); members.push(v);
+        }
+      }
+      const newId = ++nextGroupId;
+      members.forEach(idx=> pieces[idx].groupId = newId);
+    }
+  }
+
+  /* ===== SANITIZZAZIONE STRONG + RESET PORTE ===== */
+  function sanitizeGraph(){
+    const ids = new Set(pieces.map(p=>p.id));
+    const typeOf = (P, side)=> (P?.connectors?.[side] || 'none');
+    const isCompl = (a,b)=> (a==='male'&&b==='female')||(a==='female'&&b==='male');
+
+    for (const P of pieces){
+      for (const s of DIRS){
+        const c = P.connections?.[s];
+        if (!c){ P.connections[s]=null; P.engaged[s]=false; continue; }
+        if (!ids.has(c.peerId)){
+          P.connections[s] = null;
+          P.engaged[s] = false;
+        }
+      }
+    }
+    for (const P of pieces){
+      for (const s of DIRS){
+        const c = P.connections?.[s];
+        if (!c) continue;
+        const j = pieces.findIndex(Q => Q.id === c.peerId);
+        if (j < 0){ P.connections[s]=null; P.engaged[s]=false; continue; }
+        const Q = pieces[j];
+        const back = Q.connections?.[c.peerSide];
+        const tA = typeOf(P, s);
+        const tB = typeOf(Q, c.peerSide);
+        if (!back || back.peerId !== P.id || !isCompl(tA, tB)){
+          P.connections[s] = null; P.engaged[s] = false;
+          if (Q.connections && Q.engaged){
+            Q.connections[c.peerSide] = null; Q.engaged[c.peerSide] = false;
+          }
+        } else {
+          P.engaged[s] = true; Q.engaged[c.peerSide] = true;
+        }
+      }
+    }
+    rebuildGroups();
+  }
+
+  // --- START: porta-fix forti ---
+  function cleanupOrphanEngagements() {
+    for (const P of pieces) {
+      for (const s of DIRS) {
+        const c = P.connections?.[s] || null;
+        if (!c && P.engaged && P.engaged[s]) {
+          P.engaged[s] = false;
+        }
+      }
+    }
+  }
+  function normalizeConnectionsSymmetric() {
+    const id2idx = new Map(pieces.map((p,i)=>[p.id,i]));
+    const typeOf = (P, side)=> (P?.connectors?.[side] || 'none');
+    const isCompl = (a,b)=> (a==='male'&&b==='female')||(a==='female'&&b==='male');
+
+    for (const P of pieces){
+      for (const s of DIRS){
+        const c = P.connections?.[s];
+        if (!c){ P.engaged[s]=false; continue; }
+        const j = id2idx.get(c.peerId);
+        if (j===undefined) { P.connections[s]=null; P.engaged[s]=false; continue; }
+        const Q = pieces[j];
+        const back = Q.connections?.[c.peerSide];
+        const tA = typeOf(P,s), tB = typeOf(Q,c.peerSide);
+
+        if (!back || back.peerId !== P.id || !isCompl(tA,tB)){
+          P.connections[s]=null; P.engaged[s]=false;
+          if (Q.connections && Q.engaged){
+            Q.connections[c.peerSide]=null; Q.engaged[c.peerSide]=false;
+          }
+        } else {
+          P.engaged[s]=true; Q.engaged[c.peerSide]=true;
+        }
+      }
+    }
+  }
+  function hardReenablePorts(){
+    cleanupOrphanEngagements();
+    normalizeConnectionsSymmetric();
+    rebuildGroups();
+  }
+  // --- END: porta-fix forti ---
+
+  /* ===== SNAP DI GRUPPO: AGGANCIO PORTE + MERGE GRUPPI ===== */
+  function trySnapGroup(gid){
+    const members = groupMembers(gid);
+    for (const A of members){
+      for (const B of pieces){
+        if (B.groupId === gid) continue;
+        const pairs = portPairs(A, B);
+        if (!pairs.length) continue;
+
+        for (const pr of pairs){
+          const Aports = getPorts(A);
+          const Bports = getPorts(B);
+          const aPt = Aports[pr.aKey];
+          const bPt = Bports[pr.bKey];
+          if (!aPt || !bPt) continue;
+
+          const R = effectiveSnapRadius(A, B);
+          const dx = bPt.x - aPt.x, dy = bPt.y - aPt.y;
+          const dist = Math.hypot(dx, dy);
+
+          if (dist <= R){
+            translateGroup(gid, dx, dy);
+
+            const Ai = findIndexById(A.id);
+            const Bi = findIndexById(B.id);
+            if (Ai < 0 || Bi < 0) continue;
+            const A2 = pieces[Ai];
+            const B2 = pieces[Bi];
+
+            A2.connections[pr.aKey] = { peerId: B2.id, peerSide: pr.bKey };
+            B2.connections[pr.bKey] = { peerId: A2.id, peerSide: pr.aKey };
+            A2.engaged[pr.aKey] = true;
+            B2.engaged[pr.bKey] = true;
+
+            addSnapEffect(bPt.x, bPt.y);
+            mergeGroups(A2.groupId, B2.groupId);
+            hardReenablePorts();
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+  window.trySnapGroup = trySnapGroup; // utile per debug
+
+  function drawPiece(a){
+    ctx.save();
+    const angle = (isBond(a)?(a.angle||0):0);
+    const cx=a.x+a.w/2, cy=a.y+a.h/2;
+    ctx.translate(cx,cy); if(angle) ctx.rotate(angle*Math.PI/180); ctx.translate(-a.w/2,-a.h/2);
+    if (a.kind!=='boat'){ ctx.fillStyle='#fff'; ctx.fillRect(0,0,a.w,a.h); }
+    ctx.fillStyle=ATOM_COLOR; ctx.strokeStyle=ATOM_COLOR; ctx.lineWidth=2; ctx.textBaseline='middle'; ctx.font=FONT;
+    if (a.kind==='boat'){
+      const vs=boatVertices({x:0,y:0,w:a.w,h:a.h});
+      ctx.beginPath(); ctx.moveTo(vs[0].x,vs[0].y); for(let k=1;k<vs.length;k++) ctx.lineTo(vs[k].x,vs[k].y); ctx.closePath(); ctx.stroke();
+    }else{
+      const lab=labelOf(a.kind); const tw=ctx.measureText(lab).width;
+      ctx.fillText(lab,(a.w-tw)/2,a.h/2);
+    }
+    ctx.restore();
+    if (showPorts) drawPorts(a);
+  }
+  function drawPorts(a){
+    const ports=getPorts(a);
+    for (const side in ports){
+      const t=a.connectors?.[side]||'none'; if (t==='none') continue;
+      const pt=ports[side]; const engaged=!!a.engaged[side];
+      ctx.save(); ctx.lineWidth=2;
+      if (t==='female'){
+        ctx.beginPath(); ctx.arc(pt.x,pt.y,4,0,Math.PI*2);
+        engaged ? (ctx.fillStyle='rgba(56,142,60,.8)', ctx.fill()) : (ctx.strokeStyle='rgba(56,142,60,.9)', ctx.stroke());
+      }else{
+        const r=4;
+        engaged ? (ctx.fillStyle='rgba(56,142,60,.8)', ctx.fillRect(pt.x-r,pt.y-r,r*2,r*2))
+                : (ctx.strokeStyle='rgba(56,142,60,.9)', ctx.strokeRect(pt.x-r,pt.y-r,r*2,r*2));
+      }
+      ctx.restore();
+    }
+  }
+
+  function draw(ts){
+    ctx.clearRect(0,0,costruCanvas.width,costruCanvas.height);
+    pieces.forEach(p=>drawPiece(p));
+
+    ctx.fillStyle='#2e7d32';
+    ctx.font='bold 16px Arial';
+    numbers2.forEach(n => { ctx.fillText(n.text, n.x-4, n.y+6); });
+
+    if (snapEffects.length){
+      const now = ts || performance.now();
+      const D = 240;
+      for (let i=snapEffects.length-1;i>=0;i--){
+        const fx = snapEffects[i];
+        const t = (now - fx.start)/D;
+        if (t>=1){ snapEffects.splice(i,1); continue; }
+        const r = 4 + 10*t, alpha = 1 - t;
+        ctx.beginPath(); ctx.arc(fx.x, fx.y, r, 0, Math.PI*2);
+        ctx.strokeStyle = `rgba(76,175,80,${alpha})`; ctx.lineWidth=2; ctx.stroke();
+      }
+    }
+    cur.clearRect(0,0,costruCursor.width,costruCursor.height);
+    if (eraser && erasingHeld){
+      cur.beginPath(); cur.arc(cursorRing.x,cursorRing.y,9,0,Math.PI*2);
+      cur.strokeStyle='rgba(76,175,80,0.9)'; cur.lineWidth=2; cur.stroke();
+    }
+  }
+
+  function pieceHitTest(a,x,y){
+    if (a.kind!=='boat'){
+      return (x>=a.x && x<=a.x+a.w && y>=a.y && y<=a.y+a.h);
+    }
+    const vs=boatVertices(a);
+    ctx.save();
+    ctx.beginPath(); ctx.moveTo(vs[0].x,vs[0].y);
+    for(let i=1;i<vs.length;i++) ctx.lineTo(vs[i].x,vs[i].y);
+    ctx.closePath();
+    const inside = ctx.isPointInPath(x,y) || ctx.isPointInStroke(x,y);
+    ctx.restore();
+    return inside;
+  }
+
+  function nextGridPos2(canvasWidth, margin=30, step=28, count=0){
+    const cols = Math.max(1, Math.floor((canvasWidth - 2*margin)/step));
+    const col = count % cols;
+    const row = Math.floor(count / cols);
+    return { x: margin + col*step, y: margin + row*step };
+  }
+  function hitNum2(x,y){ for(let i=numbers2.length-1;i>=0;i--){ const n=numbers2[i]; if(Math.hypot(n.x-x,n.y-y)<=14) return n; } return null; }
+
+  const cursorRing={x:0,y:0};
+
+  function unlinkPieceById(id){
+    const i=pieces.findIndex(p=>p.id===id); if(i<0) return;
+    const A=pieces[i];
+    // sgancio pulito su entrambi i lati prima della rimozione
+    for (const s of DIRS){
+      const c=A.connections?.[s];
+      A.engaged[s]=false; A.connections[s]=null;
+      if(c){
+        const j=findIndexById(c.peerId);
+        if(j>=0){
+          const B=pieces[j];
+          if (B.connections && B.engaged){ B.connections[c.peerSide]=null; B.engaged[c.peerSide]=false; }
+        }
+      }
+    }
+  }
+
+  function tryEraseAt(x,y){
+    // numeri prima
+    const beforeN = numbers2.length;
+    numbers2 = numbers2.filter(n => Math.hypot(n.x-x,n.y-y) > 9);
+    if (numbers2.length !== beforeN){ draw(); saveWorkForQuestion(); return; }
+
+    // poi pezzi
+    for (let i=pieces.length-1;i>=0;i--){
+      const p=pieces[i];
+      if (pieceHitTest(p,x,y)){
+        if (selected && selected.id===p.id) selected=null;
+        unlinkPieceById(p.id);
+        pieces.splice(i,1);
+        sanitizeGraph();
+        hardReenablePorts();   // fix porte
+        draw();
+        saveWorkForQuestion();
+        return;
+      }
+    }
+  }
+
+  function saveWorkForQuestion(){
+    const payload = { pieces, numbers2 };
+    localStorage.setItem(keyQ(qIndex), JSON.stringify(payload));
+  }
+
+  /* ====== Revive connettori coerenti al tipo ====== */
+  function connectorsFor(kind){
+    const none = {N:'none',S:'none',E:'none',W:'none',A1:'none',A2:'none',A3:'none',A4:'none',A5:'none',A6:'none',EQ1:'none',EQ2:'none',EQ3:'none',EQ4:'none',EQ5:'none',EQ6:'none'};
+    const clone = (o)=>JSON.parse(JSON.stringify(o));
+    if (kind==='boat'){
+      const c=clone(none); ['A1','A2','A3','A4','A5','A6','EQ1','EQ2','EQ3','EQ4','EQ5','EQ6'].forEach(k=>c[k]='female'); return c;
+    }
+    if (kind==='bondV'){ const c=clone(none); c.N='male'; c.S='male'; return c; }
+    if (kind==='bond-'||kind==='bond='||kind==='bond≡'){ const c=clone(none); c.E='male'; c.W='male'; return c; }
+    const c=clone(none); c.N=c.S=c.E=c.W='female'; return c;
+  }
+  function revivePiece(raw){
+    const base = {
+      id: raw.id, kind: raw.kind, x: raw.x, y: raw.y, w: raw.w, h: raw.h,
+      angle: raw.angle||0, groupId: raw.groupId||nextGroupId++,
+      connectors: connectorsFor(raw.kind)
+    };
+    base.engaged = {}; base.connections = {};
+    DIRS.forEach(d=>{ base.engaged[d]=false; base.connections[d]=null; });
+    return base;
+  }
+
+  function loadWorkForQuestion(){
+    pieces = []; numbers2 = [];
+    selected=null; eraser=false; erasingHeld=false;
+    const ebtn=document.getElementById('eraser2'); if (ebtn) ebtn.classList.remove('danger');
+    const raw = localStorage.getItem(keyQ(qIndex));
+    if (raw){
+      try{
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)){
+          parsed.forEach(it => {
+            if (['—','=','≡','|'].includes(it.symbol)){
+              const map = {'—':'bond-','=':'bond=','≡':'bond≡','|':'bondV'};
+              const base = createBond(map[it.symbol]);
+              base.x = it.x || 40; base.y = it.y || 40;
+              pieces.push(base);
+            } else {
+              const base = createStandard(it.symbol);
+              base.x = it.x || 40; base.y = it.y || 40;
+              pieces.push(base);
+            }
+          });
+        } else if (parsed){
+          if (Array.isArray(parsed.pieces)){
+            pieces = parsed.pieces.map(p => revivePiece(p));
+            let maxId=0, maxG=0; pieces.forEach(p=>{ if(p.id>maxId) maxId=p.id; if(p.groupId>maxG) maxG=p.groupId; });
+            nextId=maxId+1; nextGroupId=maxG+1;
+          }
+          if (Array.isArray(parsed.numbers2)){
+            numbers2 = parsed.numbers2;
+          }
+        }
+      }catch(e){ /* ignore */ }
+    }
+    sanitizeGraph();
+    hardReenablePorts();   // fix porte
+    draw();
+  }
+
+  function bringToFront(i){ const p = pieces.splice(i,1)[0]; pieces.push(p); return pieces.length-1; }
+  function selectAt(x,y){
+    for (let i=pieces.length-1;i>=0;i--){
+      if (pieceHitTest(pieces[i],x,y)){ const t=bringToFront(i); selected=pieces[t]; draw(); return t; }
+    }
+    selected=null; draw(); return -1;
+  }
+  function addByKind(kind){
+    eraser=false; erasingHeld=false; cur.clearRect(0,0,costruCursor.width,costruCursor.height);
+    const ebtn=document.getElementById('eraser2'); if (ebtn) ebtn.classList.remove('danger');
+    let p;
+    if (kind==='boat') p=createBoat();
+    else if (kind.startsWith('bond')) p=createBond(kind);
+    else p=createStandard(kind);
+    pieces.push(p); selected=isBond(p)?p:null; draw(); saveWorkForQuestion();
+  }
+
+  document.querySelectorAll('#tools2 .add2').forEach(btn=> btn.addEventListener('click',()=> addByKind(btn.dataset.kind)) );
+  document.getElementById('addBoat2')?.addEventListener('click',()=> addByKind('boat'));
+  document.getElementById('togglePorts2')?.addEventListener('click',()=>{ showPorts=!showPorts; draw(); });
+  document.getElementById('clear2')?.addEventListener('click',()=>{
+    pieces=[]; numbers2=[]; selected=null; eraser=false; erasingHeld=false;
+    cur.clearRect(0,0,costruCursor.width,costruCursor.height);
+    sanitizeGraph();
+    hardReenablePorts();   // fix porte
+    draw(); saveWorkForQuestion();
+  });
+
+  const eraserBtn2=document.getElementById('eraser2');
+  eraserBtn2?.addEventListener('click',()=>{
+    eraser=!eraser;
+    eraserBtn2.classList.toggle('danger', eraser);
+    if(!eraser){ erasingHeld=false; cur.clearRect(0,0,costruCursor.width,costruCursor.height); }
+    draw();
+  });
+  document.getElementById('rotCW2')?.addEventListener('click',()=>{ 
+    eraser=false; eraserBtn2.classList.remove('danger'); 
+    if (selected && isBond(selected)){ 
+      selected.angle=(selected.angle+15)%360; 
+      hardReenablePorts();  // fix porte dopo rotazione
+      draw(); saveWorkForQuestion(); 
+    } 
+  });
+  document.getElementById('rotCCW2')?.addEventListener('click',()=>{ 
+    eraser=false; eraserBtn2.classList.remove('danger'); 
+    if (selected && isBond(selected)){ 
+      selected.angle=(selected.angle-15+360)%360; 
+      hardReenablePorts();  // fix porte dopo rotazione
+      draw(); saveWorkForQuestion(); 
+    } 
+  });
+
+  function toCanvas(e){ const r=costruCanvas.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top}; }
+
+  costruCanvas.addEventListener('mousemove',e=>{
+    if (eraser){
+      if (erasingHeld){
+        const {x,y}=toCanvas(e);
+        cursorRing.x=x; cursorRing.y=y;
+        tryEraseAt(x,y);
+        draw();
+      }
+      return;
+    }
+    if (dragNum2){
+      const {x,y}=toCanvas(e);
+      dragNum2.x=x; dragNum2.y=y; draw();
+      return;
+    }
+    if (!drag) return;
+    const {x,y}=toCanvas(e);
+    const A=pieces[drag.index];
+    const nx=x-drag.ox, ny=y-drag.oy;
+    const dx=nx-A.x, dy=ny-A.y;
+
+    const hasConnStrict = Object.values(A.connections||{}).some(c => c && findIndexById(c.peerId) >= 0);
+    if (hasConnStrict){
+      const comp = connectedComponentForPiece(A);
+      comp.forEach(p => { p.x += dx; p.y += dy; });
+    } else {
+      A.x += dx; A.y += dy;
+    }
+
+    // GUARD contro assenza funzione e redraw solo se snap effettivo
+    if (typeof trySnapGroup === 'function' && trySnapGroup(A.groupId)) {
+      draw();
+    } else {
+      draw();
+    }
+  });
+
+  costruCanvas.addEventListener('mousedown',e=>{
+    const {x,y}=toCanvas(e);
+    if (eraser){
+      erasingHeld = true;
+      cursorRing.x = x; cursorRing.y = y;
+      tryEraseAt(x,y);
+      draw();
+      return;
+    }
+    const n = hitNum2(x,y);
+    if (n){ dragNum2=n; return; }
+    const idx=selectAt(x,y); if (idx===-1) return;
+    const p=pieces[idx]; drag={index:idx, ox:x-p.x, oy:y-p.y};
+  });
+  window.addEventListener('mouseup',()=>{
+    if (eraser){
+      erasingHeld=false;
+      cur.clearRect(0,0,costruCursor.width,costruCursor.height);
+      draw();
+    }
+    if (drag){ 
+      drag=null; 
+      hardReenablePorts(); // fix porte a fine drag
+      saveWorkForQuestion(); 
+    }
+    if (dragNum2){ dragNum2=null; saveWorkForQuestion(); }
+  });
+  costruCanvas.addEventListener('mouseleave', ()=>{
+    if (eraser){
+      erasingHeld=false;
+      cur.clearRect(0,0,costruCursor.width,costruCursor.height);
+      draw();
+    }
+    if (dragNum2){ dragNum2=null; saveWorkForQuestion(); }
+  });
+
+  function toTouch(t){ const r=costruCanvas.getBoundingClientRect(); return {x:t.clientX-r.left, y:t.clientY-r.top}; }
+  costruCanvas.addEventListener('touchmove',e=>{
+    if(!e.touches.length) return;
+    const {x,y}=toTouch(e.touches[0]);
+    if (eraser){
+      if (erasingHeld){
+        cursorRing.x=x; cursorRing.y=y;
+        tryEraseAt(x,y);
+        draw();
+      }
+      return;
+    }
+    if (dragNum2){
+      dragNum2.x=x; dragNum2.y=y; draw(); return;
+    }
+    if (!drag) return;
+    const A=pieces[drag.index];
+    const nx=x-drag.ox, ny=y-drag.oy; const dx=nx-A.x, dy=ny-A.y;
+
+    const hasConnStrict = Object.values(A.connections||{}).some(c => c && findIndexById(c.peerId) >= 0);
+    if (hasConnStrict){
+      const comp = connectedComponentForPiece(A);
+      comp.forEach(p => { p.x += dx; p.y += dy; });
+    } else {
+      A.x += dx; A.y += dy;
+    }
+
+    // GUARD su mobile
+    if (typeof trySnapGroup === 'function' && trySnapGroup(A.groupId)) {
+      draw();
+    } else {
+      draw();
+    }
+  },{passive:true});
+  costruCanvas.addEventListener('touchstart',e=>{
+    if(!e.touches.length) return; const {x,y}=toTouch(e.touches[0]);
+    if (eraser){
+      erasingHeld=true; cursorRing.x=x; cursorRing.y=y; draw(); tryEraseAt(x,y); return;
+    }
+    const n = hitNum2(x,y);
+    if (n){ dragNum2=n; return; }
+    const idx=selectAt(x,y); if (idx===-1) return; const p=pieces[idx]; drag={index:idx, ox:x-p.x, oy:y-p.y};
+  },{passive:true});
+  costruCanvas.addEventListener('touchend',()=>{
+    if (eraser){
+      erasingHeld=false;
+      cur.clearRect(0,0,costruCursor.width,costruCursor.height);
+      draw();
+    }
+    if (drag){ 
+      drag=null; 
+      hardReenablePorts(); // fix porte a fine drag
+      saveWorkForQuestion(); 
+    }
+    if (dragNum2){ dragNum2=null; saveWorkForQuestion(); }
+  },{passive:true});
+
+  document.querySelectorAll('#numsToolbar2 .num2').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const p = nextGridPos2(costruCanvas.width, 30, 28, numbers2.length);
+      numbers2.push({x:p.x,y:p.y,text:btn.textContent});
+      draw(); saveWorkForQuestion();
+    });
+  });
+
+  document.getElementById('prevQ')?.addEventListener('click',()=>{ if(qIndex>0) setQuestion(qIndex-1); });
+  document.getElementById('nextQ')?.addEventListener('click',()=>{ if(qIndex<questions.length-1) setQuestion(qIndex+1); else alert('Ultima domanda: premi "Consegna verifica".'); });
+
+  window.setQuestion = setQuestion;
+  window.keyQ = keyQ;
+
+  setQuestion(0);
+})();
+</script>
+
+<script>
+/* ===== Utility immagine per valutazione Sezione 1 (solo tratti + numeri) ===== */
+// luminanza per "quasi bianco"
+function luma601(r,g,b){ return 0.299*r + 0.587*g + 0.114*b; }
+
+function loadImageData(src, w, h){
+  return new Promise(res=>{
+    const img=new Image();
+    img.onload=()=>{
+      const cw=w||img.width, ch=h||img.height;
+      const c=document.createElement('canvas'); c.width=cw; c.height=ch;
+      const g=c.getContext('2d'); g.drawImage(img,0,0,cw,ch);
+      res(g.getImageData(0,0,cw,ch));
+    };
+    img.onerror=()=>res(null);
+    img.src=src||'';
+  });
+}
+function dataUrlToImageData(dataUrl){
+  return new Promise(res=>{
+    const img=new Image();
+    img.onload=()=>{
+      const c=document.createElement('canvas'); c.width=img.width; c.height=img.height;
+      const g=c.getContext('2d'); g.drawImage(img,0,0);
+      res(g.getImageData(0,0,img.width,img.height));
+    };
+    img.onerror=()=>res(null);
+    img.src=dataUrl||'';
+  });
+}
+function maskFromAlpha(img, thr=16){
+  const {data,width,height}=img; const out=new Uint8Array(width*height);
+  for(let i=0,px=0;i<data.length;i+=4,px++){ out[px] = (data[i+3]>=thr)?1:0; }
+  return {mask:out,width,height};
+}
+function maskFromNonWhite(img, whiteTol=245){
+  const {data,width,height}=img; const out=new Uint8Array(width*height);
+  for(let i=0,px=0;i<data.length;i+=4,px++){
+    const a=data[i+3]; if(a===0){ out[px]=0; continue; }
+    const Y=luma601(data[i],data[i+1],data[i+2]); out[px]=(Y<whiteTol)?1:0;
+  }
+  return {mask:out,width,height};
+}
+// dilatazione 1px per tolleranza percorso
+function dilate1(mask,w,h){
+  const out=new Uint8Array(mask.length);
+  const N=[-w-1,-w,-w+1, -1,0,1, w-1,w,w+1];
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      const i=y*w+x;
+      if(mask[i]){ out[i]=1; continue; }
+      for(const off of N){
+        const j=i+off;
+        if(j<0||j>=mask.length) continue;
+        const dx=Math.abs((j%w)-(i%w));
+        const dy=Math.abs(((j/w)|0)-((i/w)|0));
+        if(dx>1||dy>1) continue;
+        if(mask[j]){ out[i]=1; break; }
+      }
+    }
+  }
+  return out;
+}
+function diceScore(A,B){
+  let tp=0,a=0,b=0;
+  for(let i=0;i<A.length;i++){ const va=A[i], vb=B[i]; if(va) a++; if(vb) b++; if(va&&vb) tp++; }
+  if(a+b===0) return 1;
+  return (2*tp)/(a+b);
+}
+// Overlap tratti tollerante
+async function scoreStrokesOverlap(studentDataUrl, teacherPngUrl){
+  const stud = await dataUrlToImageData(studentDataUrl);
+  if(!stud) return 0;
+  const teach = await loadImageData(teacherPngUrl, stud.width, stud.height);
+  if(!teach) return 0;
+  const A = maskFromAlpha(stud);
+  const B = maskFromNonWhite(teach, 245);
+  const Ad = dilate1(A.mask, A.width, A.height);
+  const Bd = dilate1(B.mask, B.width, B.height);
+  return diceScore(Ad, Bd);
+}
+// Numeri: posizione + ordine
+function scoreNumbersSequence(expectedArr, studentNums, tol=16){
+  if(!expectedArr || !expectedArr.length) return 0;
+  const matchedIdx=[]; let hit=0;
+  expectedArr.forEach((exp, idx)=>{
+    const cand = (studentNums||[]).filter(n => String(n.text)===String(exp.text));
+    let ok=false;
+    for(const n of cand){
+      const d=Math.hypot(n.x-exp.x, n.y-exp.y);
+      if(d<=tol){ ok=true; break; }
+    }
+    if(ok){ hit++; matchedIdx.push(idx); }
+  });
+  const posScore = hit/expectedArr.length;
+  let inv=0; for(let i=0;i<matchedIdx.length;i++){ for(let j=i+1;j<matchedIdx.length;j++){ if(matchedIdx[i]>matchedIdx[j]) inv++; } }
+  const maxInv = matchedIdx.length*(matchedIdx.length-1)/2;
+  const ordScore = maxInv? (1 - inv/maxInv) : 1;
+  return 0.5*posScore + 0.5*ordScore;
+}
+</script>
+
+<script>
+/* ===== Funzioni immagine per Riepilogo (png sezione 2) ===== */
+function compositeStudentImage(file){
+  return new Promise(resolve=>{
+    const savedRaw = localStorage.getItem('annota_'+file);
+    const saved = savedRaw ? JSON.parse(savedRaw) : {};
+    const img = new Image();
+    img.onload=()=>{
+      const c=document.createElement('canvas');
+      c.width=img.width; c.height=img.height;
+      const t=c.getContext('2d');
+      t.drawImage(img,0,0);
+      if(saved.strokes){
+        const s=new Image();
+        s.onload=()=>{
+          t.drawImage(s,0,0);
+          t.fillStyle='#2e7d32'; t.font='bold 16px Arial';
+          (saved.numbers||[]).forEach(n=>t.fillText(n.text,n.x-4,n.y+5));
+          resolve(c.toDataURL('image/png'));
+        };
+        s.src=saved.strokes;
+      }else{
+        t.fillStyle='#2e7d32'; t.font='bold 16px Arial';
+        (saved.numbers||[]).forEach(n=>t.fillText(n.text,n.x-4,n.y+5));
+        resolve(c.toDataURL('image/png'));
+      }
+    };
+    img.onerror=()=>resolve('');
+    img.src=file;
+  });
+}
+function renderBuildSnapshot(payload, width=800, height=500){
+  try{
+    const c=document.createElement('canvas'); c.width=width; c.height=height;
+    const ctx=c.getContext('2d');
+    ctx.fillStyle='#fff'; ctx.fillRect(0,0,width,height);
+    const FONT='20px Arial';
+    ctx.font=FONT; ctx.textBaseline='middle';
+    const labelOf = (kind)=>(
+      kind==='bond-'?'—': kind==='bond='?'=': kind==='bond≡'?'≡': kind==='bondV'?'|':
+      kind==='CH2'?'CH₂': kind==='CH3'?'CH₃': kind
+    );
+    function boatVertices(a){
+      const x=a.x, y=a.y;
+      const v1={x:x+40,  y:y+135}, v2={x:x+140, y:y+60}, v3={x:x+260, y:y+95},
+            v4={x:x+395, y:y+180}, v5={x:x+300, y:y+235}, v6={x:x+170, y:y+205};
+      return [v1,v2,v3,v4,v5,v6];
+    }
+    (payload.pieces||[]).forEach(p=>{
+      ctx.save();
+      if (p.kind==='boat'){
+        const vs=boatVertices(p);
+        ctx.beginPath(); ctx.moveTo(vs[0].x,vs[0].y);
+        for(let i=1;i<vs.length;i++) ctx.lineTo(vs[i].x,vs[i].y);
+        ctx.closePath(); ctx.strokeStyle='#000'; ctx.lineWidth=2; ctx.stroke();
+      }else{
+        ctx.fillStyle='#fff'; ctx.fillRect(p.x, p.y, p.w, p.h);
+        const lab=labelOf(p.kind); const tw=ctx.measureText(lab).width;
+        if (p.kind.startsWith('bond') && p.angle){
+          const cx=p.x+p.w/2, cy=p.y+p.h/2;
+          ctx.translate(cx,cy); ctx.rotate((p.angle||0)*Math.PI/180); ctx.translate(-p.w/2,-p.h/2);
+          ctx.fillStyle='#000'; ctx.fillText(lab,(p.w-tw)/2,p.h/2);
+        }else{
+          ctx.fillStyle='#000'; ctx.fillText(lab,(p.w-tw)/2 + p.x, p.h/2 + p.y);
+        }
+      }
+      ctx.restore();
+    });
+    ctx.fillStyle='#2e7d32'; ctx.font='bold 16px Arial';
+    (payload.numbers2||[]).forEach(n=> ctx.fillText(n.text, n.x-4, n.y+6));
+    return c.toDataURL('image/png');
+  }catch(_){ return ''; }
+}
+</script>
+
+<script>
+/* ===== Valutazione & Riepilogo + consegna ===== */
+function editDistance(a,b){const dp=Array.from({length:b.length+1},(_,j)=>j);for(let i=1;i<=a.length;i++){let prev=i-1;dp[0]=i;for(let j=1;j<=b.length;j++){const tmp=dp[j];const cost=a[i-1]===b[j-1]?0:1;dp[j]=Math.min(dp[j]+1,dp[j-1]+1,prev+cost);prev=tmp;}}return dp[b.length];}
+function simFine(a,b){a=(a||'').toLowerCase().trim();b=(b||'').toLowerCase().trim();const L=Math.max(a.length,b.length);if(L===0)return 1;const ed=editDistance(a,b);const s=(L-ed)/L;if(s>=0.90)return 1.0;if(s>=0.75)return 0.75;if(s>=0.50)return 0.50;if(s>=0.25)return 0.25;return 0.0;}
+function countAtoms(listOrObj){
+  let list = [];
+  if (Array.isArray(listOrObj)){
+    list = listOrObj;
+  } else if (listOrObj && Array.isArray(listOrObj.pieces)){
+    list = listOrObj.pieces.map(p => {
+      if (p.kind==='bond-') return {symbol:'—'};
+      if (p.kind==='bond=') return {symbol:'='};
+      if (p.kind==='bond≡') return {symbol:'≡'};
+      if (p.kind==='bondV') return {symbol:'|'};
+      if (p.kind==='CH2')   return {symbol:'CH₂'};
+      if (p.kind==='CH3')   return {symbol:'CH₃'};
+      return {symbol:p.kind};
+    });
+  }
+  const cnt={C:0,H:0,Cl:0,Br:0,F:0,I:0,bonds:{'—':0,'=':0,'≡':0}};
+  list.forEach(a=>{
+    const s=a.symbol;
+    if (s==='C') cnt.C++;
+    else if (s==='H') cnt.H++;
+    else if (s==='Cl') cnt.Cl++;
+    else if (s==='Br') cnt.Br++;
+    else if (s==='F') cnt.F++;
+    else if (s==='I') cnt.I++;
+    else if (s==='CH') { cnt.C+=1; cnt.H+=1; }
+    else if (s==='CH₂'){ cnt.C+=1; cnt.H+=2; }
+    else if (s==='CH₃'){ cnt.C+=1; cnt.H+=3; }
+    else if (s==='—') cnt.bonds['—']++;
+    else if (s==='=') cnt.bonds['=']++;
+    else if (s==='≡') cnt.bonds['≡']++;
+  });
+  return cnt;
+}
+function scoreBuild(exp,got){const keys=['C','H','Cl','Br','F','I'];let parts=[];keys.forEach(k=>{const e=exp[k]||0,g=got[k]||0;if(e===0&&g===0)parts.push(1);else if(e===0&&g>0)parts.push(0);else parts.push(Math.min(g,e)/Math.max(e,1));});['—','=','≡'].forEach(sym=>{const expB=(exp.bonds||'').split('').filter(s=>s===sym).length;const gotB=(got.bonds||{})[sym]||0;if(expB===0&&gotB===0)parts.push(1);else if(expB===0&&gotB>0)parts.push(0);else parts.push(Math.min(gotB,expB)/Math.max(expB,1));});const avg=parts.reduce((a,c)=>a+c,0)/parts.length;if(avg>=0.90)return 1.0;if(avg>=0.75)return 0.75;if(avg>=0.50)return 0.50;if(avg>=0.25)return 0.25;return 0.0;}
+
+document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
+  const sicuro = confirm('Sei sicuro di voler consegnare la verifica?\nPremi "OK" per consegnare o "Annulla" per tornare indietro.');
+  if (!sicuro) return;
+
+  try {
+    endTime = new Date();
+    if(timerInt){clearInterval(timerInt); timerInt=null;}
+    document.getElementById('sezione1').style.display='none';
+    document.getElementById('sezione2').style.display='none';
+
+    const nome = (document.getElementById('nome').value||'').trim();
+    const cognome = (document.getElementById('cognome').value||'').trim();
+    const classe = (document.getElementById('classe').value||'').trim();
+    const dataStr = (document.getElementById('data').value||'');
+
+    // intestazione
+    const anag = document.getElementById('anagrafica');
+    anag.innerHTML = `
+      <div><strong>Studente:</strong> ${esc(nome)} ${esc(cognome)} — <strong>Classe:</strong> ${esc(classe)}</div>
+      <div><strong>Data:</strong> ${esc(dataStr)} — <strong>Inizio:</strong> ${fmtTime(startTime)} — <strong>Fine:</strong> ${esc(fmtTime(endTime))}</div>
+    `;
+
+    /* ===== Sezione 1 ===== */
+    let puntiSec1=0;
+    const cont1 = document.getElementById('riepilogoAnnota');
+    cont1.innerHTML='';
+
+    for(const file of molFiles){
+      try{
+        const saved = JSON.parse(localStorage.getItem('annota_'+file) || '{}');
+
+        const userTxt = (saved.text||'').trim();
+        const corr = correctNames[file] || '';
+        const sText = userTxt ? simFine(userTxt, corr) : 0;
+
+        let sStrokes=0, sNums=0, sVis=0;
+        const key = (window.answerKeys||{})[file];
+        if (key && key.mask){
+          sStrokes = await scoreStrokesOverlap(saved.strokes||'', key.mask);
+          sNums    = scoreNumbersSequence(key.numbers||[], saved.numbers||[], key.tol||16);
+          sVis     = (key.numbers && key.numbers.length) ? (0.5*sStrokes + 0.5*sNums) : sStrokes;
+        }
+
+        const pts = +((sText*(window.W_TEXT||1) + sVis*(window.W_VIS||1))).toFixed(2);
+        puntiSec1 += pts;
+
+        const studImg = await compositeStudentImage(file).catch(()=>'');
+
+        const card = document.createElement('div'); card.className='card';
+        const txt = document.createElement('div');
+
+        const badgeTxt = sText>=0.9?'ok':(sText>=0.5?'warn':'err');
+        const badgeVis = sVis>=0.9?'ok':(sVis>=0.5?'warn':'err');
+
+        txt.innerHTML = `
+          <div><strong>${esc(file.replace('.jpg',''))}</strong></div>
+          <div>🧠 Sezione 1 (max 2):
+            <span class="badge ${badgeTxt}" title="testo">${(sText*(window.W_TEXT||1)).toFixed(2)} / ${(window.W_TEXT||1)}</span>
+            +
+            <span class="badge ${badgeVis}" title="annotazioni visive">${(sVis*(window.W_VIS||1)).toFixed(2)} / ${(window.W_VIS||1)}</span>
+            =
+            <span class="badge ${pts>=1.5?'ok':(pts>=1?'warn':'err')}">${pts.toFixed(2)} / 2.00</span>
+          </div>
+          <div class="ansFieldWrap">
+            <span class="ansLabel">Nome proposto dallo studente</span>
+            <input class="ansInput" type="text" readonly value="${userTxt ? esc(userTxt) : ''}" placeholder="(vuoto)"/>
+          </div>
+          <div class="ansFieldWrap">
+            <span class="ansLabel">Nome corretto</span>
+            <input class="ansInput" type="text" readonly value="${esc(corr)}"/>
+          </div>
+        `;
+
+        const imgs = document.createElement('div'); imgs.className='wide';
+        if (studImg){ const i1=new Image(); i1.src=studImg; i1.alt='Annotazione studente'; imgs.appendChild(i1); }
+        const i2=new Image(); i2.src=correctImagesAnnota[file]||''; i2.alt='Soluzione corretta'; imgs.appendChild(i2);
+
+        card.appendChild(txt); card.appendChild(imgs);
+        cont1.appendChild(card);
+      }catch(err){
+        console.warn('[Sez1]', file, err);
+      }
+    }
+
+    /* ===== Sezione 2 ===== */
+    let puntiSec2=0;
+    const cont2 = document.getElementById('riepilogoCostru');
+    cont2.innerHTML='';
+
+    const questions=[
+      {testo:"Costruisci: 3,3-dibromo-1,1,5,5-tetracloropentano",correctImg:"costruzione_1_corretto.png",expected:{C:5,H:12,Br:2,Cl:4,F:0,I:0,bonds:"———==" }},
+      {testo:"Costruisci: 1-cloro-4,4-dimetil-2-esino",correctImg:"costruzione_2_corretto.png",expected:{C:8,H:14,Br:0,Cl:1,F:0,I:0,bonds:"—≡" }},
+      {testo:"Costruisci: 1-bromo-3-etil-4-metil-3-esene",correctImg:"costruzione_3_corretto.png",expected:{C:9,H:18,Br:1,Cl:0,F:0,I:0,bonds:"—=" }}
+    ];
+
+    for (let idx=0; idx<questions.length; idx++){
+      try{
+        const q = questions[idx];
+        const raw = localStorage.getItem('build_q_'+idx);
+        let payload = null;
+        try{ payload = raw ? JSON.parse(raw) : null; }catch(_){ payload=null; }
+
+        const got = countAtoms(payload || []);
+        const s = scoreBuild(q.expected, got);
+        const pts = +(s*1).toFixed(2);
+        puntiSec2 += pts;
+
+        let studPNG = '';
+        try{
+          if (payload) studPNG = renderBuildSnapshot(payload, 800, 500);
+        }catch(_){ studPNG=''; }
+
+        const card = document.createElement('div'); card.className='card';
+        const txt = document.createElement('div');
+        const badge = s>=0.9?'ok':(s>=0.5?'warn':'err');
+        txt.innerHTML = `
+          <div><strong>Domanda ${idx+1}</strong></div>
+          <div class="mini"><em>Richiesta:</em> ${esc(q.testo)}</div>
+          <div>⚗️ Costruzione (max 1): <span class="badge ${badge}">${pts} / 1</span></div>
+        `;
+
+        const imgs = document.createElement('div'); imgs.className='wide';
+        if (studPNG){ const i1=new Image(); i1.src=studPNG; i1.alt='Soluzione studente'; imgs.appendChild(i1); }
+        const sol=new Image(); sol.src=q.correctImg; sol.alt='Soluzione corretta'; imgs.appendChild(sol);
+
+        card.appendChild(txt); card.appendChild(imgs);
+        cont2.appendChild(card);
+      }catch(err){
+        console.warn('[Sez2] domanda', idx+1, err);
+      }
+    }
+
+    const tot = puntiSec1 + puntiSec2; // max 13
+    const voto = +(((tot)/13)*10).toFixed(2);
+    const totali = document.getElementById('totali');
+    totali.innerHTML = `
+      <div><strong>Sezione 1:</strong> ${puntiSec1.toFixed(2)} / 10 — <strong>Sezione 2:</strong> ${puntiSec2.toFixed(2)} / 3</div>
+      <div style="margin-top:6px; font-size:18px;">
+        <strong>Punteggio complessivo:</strong> ${voto} / 10 — 
+        ${voto>=6 ? '<span class="badge ok">Bravo!</span>' : '<span class="badge err">Peccato, studia meglio per la prossima verifica.</span>'}
+      </div>
+    `;
+
+    document.getElementById('resultSection').style.display='block';
+  } catch (err){
+    console.error('[Consegna] errore:', err);
+    alert('Si è verificato un errore durante la generazione del riepilogo. Controlla la console per i dettagli.');
+  }
+});
+</script>
+</body>
+</html>
