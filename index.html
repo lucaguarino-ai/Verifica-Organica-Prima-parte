@@ -14,6 +14,7 @@
   .section{ background:#fff; border:2px solid var(--bordo); border-radius:10px; padding:12px; margin:12px auto; width:95%; max-width:1100px; box-shadow:0 4px 10px var(--ombra);}
   button{ background:var(--verde); color:#fff; border:none; border-radius:6px; padding:8px 12px; margin:4px; cursor:pointer; }
   button:hover{ background:var(--accent); }
+  button:disabled{ opacity:.6; cursor:not-allowed; }
   button.active{ outline:2px solid var(--accent); }
   button.danger{ outline:2px solid var(--rosso); }
   input, textarea{ padding:8px; border:1px solid #a5d6a7; border-radius:6px; }
@@ -24,6 +25,7 @@
   .indicator{ font-weight:bold; }
   .swatch{ width:28px; height:28px; border-radius:50%; border:2px solid #fff; outline:1px solid #333; cursor:pointer; }
   .swatch.sel{ box-shadow:0 0 0 2px #fff, 0 0 0 4px var(--accent) inset; }
+
   .numBtn{ background:var(--verde); color:#fff; width:30px; height:30px; border-radius:50%; font-weight:bold; }
 
   .stage{ position:relative; border:2px solid var(--bordo); background:#fff; border-radius:10px; overflow:hidden; box-shadow:0 2px 6px var(--ombra);}
@@ -61,33 +63,22 @@
   #studentSection input{ min-width:160px; }
   input.small-note{display:block; margin:10px auto 0;}
 
-  /* Riepilogo */
-  .ansFieldWrap{ margin-top:6px; display:flex; flex-direction:column; gap:4px; }
-  .ansLabel{ font-size:12px; color:#1b5e20; }
-  .ansInput{ width:min(420px,95%); padding:6px 8px; border:1px solid #a5d6a7; border-radius:6px; background:#f8fff8; color:#0b3d0b; }
-
-  /* Lock overlay */
-  #lockOverlay{
-    position:relative;
-    margin:12px auto 0;
-    border:2px dashed #b71c1c;
-    border-radius:10px;
-    background:rgba(255,235,238,.8);
-    padding:12px;
-    display:none;
+  /* Riepilogo lock */
+  .locked *:not(.pinDialog){ filter: blur(4px); pointer-events:none; user-select:none; }
+  .pinDialog{
+    position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+    background:rgba(0,0,0,0.35); z-index:9999;
   }
-  #lockOverlay .row{justify-content:center}
-  #lockedMask{
-    display:none;
-    position:absolute; inset:0;
-    background:rgba(255,255,255,0.7);
-    backdrop-filter: blur(1px);
-    border-radius:8px;
+  .pinBox{
+    background:#fff; border:2px solid var(--bordo); border-radius:10px; padding:16px; width:min(90vw,360px);
+    box-shadow:0 6px 16px rgba(0,0,0,.25); text-align:center;
   }
-  #lockOverlay.active #lockedMask{ display:block; }
+  .pinBox h4{ margin:0 0 10px; }
+  .pinBox input{ width:160px; text-align:center; font-size:18px; letter-spacing:4px; }
+  .pinBox .errMsg{ color:#c62828; min-height:18px; margin-top:6px; }
 
   @media print{
-    #studentSection, #sezione1, #sezione2, #studentInfoBar, #lockOverlay { display:none !important; }
+    #studentSection, #sezione1, #sezione2, #studentInfoBar, .pinDialog { display:none !important; }
     body{ background:#fff; }
     .section{ border:none; box-shadow:none; }
   }
@@ -212,28 +203,28 @@
 </div>
 
 <!-- RIEPILOGO -->
-<div class="section" id="resultSection" style="display:none; position:relative;">
+<div class="section" id="resultSection" style="display:none;">
   <h3>Riepilogo verifica</h3>
-
-  <!-- BLOCCO: Codice di sblocco -->
-  <div id="lockOverlay" class="">
-    <div id="lockedMask"></div>
-    <div class="row" style="gap:8px; flex-wrap:wrap; justify-content:center;">
-      <span style="font-weight:bold; color:#b71c1c;">Riepilogo bloccato.</span>
-      <span>Inserisci il codice di sblocco per visualizzare o esportare: </span>
-      <input id="unlockCode" placeholder="Codice" style="width:90px; text-align:center;">
-      <button id="unlockBtn">Sblocca</button>
-      <span id="unlockMsg" style="color:#b71c1c;"></span>
-    </div>
-  </div>
-
   <div id="anagrafica"></div><hr/>
   <h4>Sezione 1 – Annotazione</h4><div id="riepilogoAnnota"></div>
   <h4>Sezione 2 – Costruzione</h4><div id="riepilogoCostru"></div>
   <h4>Totale</h4><div id="totali"></div>
   <div class="space-between">
     <button id="backHomeBtn">⬅️ Torna alla schermata iniziale</button>
-    <button id="printBtn">📄 Esporta PDF</button>
+    <button id="printBtn" onclick="window.print()">📄 Esporta PDF</button>
+  </div>
+</div>
+
+<!-- PIN dialog (mostrato dopo consegna) -->
+<div id="pinDialog" class="pinDialog" style="display:none;">
+  <div class="pinBox">
+    <h4>Inserisci PIN di sblocco</h4>
+    <p class="mini">Il riepilogo è protetto. Inserisci il codice per visualizzare/ stampare.</p>
+    <input id="pinInput" inputmode="numeric" autocomplete="one-time-code" maxlength="4" placeholder="****">
+    <div class="errMsg" id="pinErr"></div>
+    <div style="margin-top:8px;">
+      <button id="pinOk">Sblocca</button>
+    </div>
   </div>
 </div>
 
@@ -244,9 +235,13 @@ function pad(n){return String(n).padStart(2,'0');}
 function fmtHMS(ms){const s=Math.floor(ms/1000);const h=Math.floor(s/3600);const m=Math.floor((s%3600)/60);const ss=s%60;return pad(h)+':'+pad(m)+':'+pad(ss);}
 
 /* ===== Data e orari ===== */
-const today = new Date();
-const dataEl=document.getElementById('data');
-if(dataEl) dataEl.value = today.toLocaleDateString('it-IT',{year:'numeric',month:'2-digit',day:'2-digit'});
+function setTodayInDateField(){
+  const today=new Date();
+  const dataEl=document.getElementById('data');
+  if(dataEl) dataEl.value=today.toLocaleDateString('it-IT',{year:'numeric',month:'2-digit',day:'2-digit'});
+}
+setTodayInDateField();
+
 let startTime=null,endTime=null,timerInt=null;
 const studentInfoBar=document.getElementById('studentInfoBar');
 const fmtTime=d=>d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
@@ -261,7 +256,6 @@ window.addEventListener('beforeunload', (e) => {
 });
 function resetAllProgress(opts={}){
   const keepResult = !!opts.keepResult;
-
   // rimuovi risposte salvate
   const toDelete = [];
   for (let i=0;i<localStorage.length;i++){
@@ -271,7 +265,6 @@ function resetAllProgress(opts={}){
   }
   toDelete.forEach(k=>localStorage.removeItem(k));
 
-  // azzera UI (se torniamo alla home)
   if (!keepResult){
     try{
       document.getElementById('resultSection').style.display='none';
@@ -280,17 +273,16 @@ function resetAllProgress(opts={}){
       document.getElementById('studentSection').style.display='block';
       document.getElementById('studentInfoBar').style.display='none';
     }catch(_){}
-    ['nome','cognome','classe','data'].forEach(id=>{
-      const el=document.getElementById(id); if(el) el.value='';
-    });
-    // disattiva warning solo se torniamo alla home
-    enableLeaveWarning(false);
+    // campi anagrafica (ripristina la data auto)
+    ['nome','cognome','classe'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+    setTodayInDateField();
   }
+  // stop timer
   try{ if(timerInt){ clearInterval(timerInt); timerInt=null; } }catch(_){}
+  // warning
+  enableLeaveWarning(false);
 }
-</script>
 
-<script>
 /* ===== Avvio verifica ===== */
 document.getElementById('iniziaBtn').addEventListener('click', ()=>{
   const nome=document.getElementById('nome').value.trim();
@@ -299,7 +291,9 @@ document.getElementById('iniziaBtn').addEventListener('click', ()=>{
   if(!nome||!cognome||!classe){alert('Compila Nome, Cognome e Classe.');return;}
   startTime=new Date();
 
-  studentInfoBar.innerHTML=`Studente: <strong>${esc(nome)} ${esc(cognome)}</strong> — Classe: ${esc(classe)} — Data: ${dataEl.value} — Inizio: ${fmtTime(startTime)} — <span id="liveTimer">Tempo trascorso: 00:00:00</span>`;
+  const dataEl=document.getElementById('data');
+
+  studentInfoBar.innerHTML=`Studente: <strong>${esc(nome)} ${esc(cognome)}</strong> — Classe: ${esc(classe)} — Data: ${esc(dataEl.value)} — Inizio: ${fmtTime(startTime)} — <span id="liveTimer">Tempo trascorso: 00:00:00</span>`;
   studentInfoBar.style.display='block';
 
   const liveTimer=document.getElementById('liveTimer');
@@ -335,14 +329,14 @@ const correctImagesAnnota={
 };
 
 /* Pesi/chiavi globali per il riepilogo */
-window.W_TEXT = 1.0;  // punteggio "testo" (simFine ⊕ NLP features)
-window.W_VIS  = 1.0;  // punteggio "visivo" (overlap ⊕ numeri)
+window.W_TEXT = 1.0;
+window.W_VIS  = 1.0;
 window.answerKeys = {
-  "alcano.jpg":  { mask: correctImagesAnnota["alcano.jpg"],  numbers: [], tol: 16 },
-  "alchene.jpg": { mask: correctImagesAnnota["alchene.jpg"], numbers: [], tol: 16 },
-  "alchino.jpg": { mask: correctImagesAnnota["alchino.jpg"], numbers: [], tol: 16 },
-  "diene.jpg":   { mask: correctImagesAnnota["diene.jpg"],   numbers: [], tol: 16 },
-  "benzene.jpg": { mask: correctImagesAnnota["benzene.jpg"], numbers: [], tol: 16 }
+  "alcano.jpg":  { mask: correctImagesAnnota["alcano.jpg"],  numbers: [], tol: 18 },
+  "alchene.jpg": { mask: correctImagesAnnota["alchene.jpg"], numbers: [], tol: 18 },
+  "alchino.jpg": { mask: correctImagesAnnota["alchino.jpg"], numbers: [], tol: 18 },
+  "diene.jpg":   { mask: correctImagesAnnota["diene.jpg"],   numbers: [], tol: 18 },
+  "benzene.jpg": { mask: correctImagesAnnota["benzene.jpg"], numbers: [], tol: 18 }
 };
 
 let molIdx=0;
@@ -432,7 +426,7 @@ function applyLoadedState(state){
   draggingNum=null; drawing1=false; erasing1=false;
   sctx.clearRect(0,0,strokes1.width,strokes1.height);
   nctx.clearRect(0,0,nums1.width,nums1.height);
-  cctx.clearRect(0,0,cursor1.width,0);
+  cctx.clearRect(0,0,cursor1.width,cursor1.height);
   nomeInput.value = state.text || '';
   if(state.strokes){
     const si=new Image(); si.onload=()=>sctx.drawImage(si,0,0); si.src=state.strokes;
@@ -596,8 +590,8 @@ nums1.addEventListener('mousemove',e=>{
 
   const ATOM_COLOR='#000';
   const FONT='20px Arial';
-  const SNAP_DIST = 2.2;
-  const SOFT_SNAP_DIST = 10;
+  const SNAP_DIST = 3;             // più permissivo
+  const SOFT_SNAP_DIST = 12;       // più permissivo
   const BOND_LEN = 26;
   const DIRS=['N','S','E','W','A1','A2','A3','A4','A5','A6','EQ1','EQ2','EQ3','EQ4','EQ5','EQ6'];
   const isBond = (p)=> p && (p.kind==='bond-' || p.kind==='bond=' || p.kind==='bond≡' || p.kind==='bondV');
@@ -682,7 +676,7 @@ nums1.addEventListener('mousemove',e=>{
   }
 
   function boatVertices(a){
-    const x=a.x, y=a.y;
+    const x=a.x, y=a.y, w=a.w, h=a.h;
     const v1={x:x+40,  y:y+135};
     const v2={x:x+140, y:y+60};
     const v3={x:x+260, y:y+95};
@@ -757,62 +751,6 @@ nums1.addEventListener('mousemove',e=>{
     return pieces.filter(p => compIds.has(p.id));
   }
 
-  function cleanupOrphanEngagements() {
-    for (const P of pieces) {
-      for (const s of DIRS) {
-        const c = P.connections?.[s] || null;
-        if (!c && P.engaged && P.engaged[s]) P.engaged[s] = false;
-      }
-    }
-  }
-  function normalizeConnectionsSymmetric() {
-    const id2idx = new Map(pieces.map((p,i)=>[p.id,i]));
-    const typeOf = (P, side)=> (P?.connectors?.[side] || 'none');
-    const isCompl = (a,b)=> (a==='male'&&b==='female')||(a==='female'&&b==='male');
-    for (const P of pieces){
-      for (const s of DIRS){
-        const c = P.connections?.[s];
-        if (!c){ P.engaged[s]=false; continue; }
-        const j = id2idx.get(c.peerId);
-        if (j===undefined) { P.connections[s]=null; P.engaged[s]=false; continue; }
-        const Q = pieces[j];
-        const back = Q.connections?.[c.peerSide];
-        const tA = typeOf(P,s), tB = typeOf(Q,c.peerSide);
-        if (!back || back.peerId !== P.id || !isCompl(tA,tB)){
-          P.connections[s]=null; P.engaged[s]=false;
-          if (Q.connections && Q.engaged){
-            Q.connections[c.peerSide]=null; Q.engaged[c.peerSide]=false;
-          }
-        } else {
-          P.engaged[s]=true; Q.engaged[c.peerSide]=true;
-        }
-      }
-    }
-  }
-  function hardReenablePorts(){
-    cleanupOrphanEngagements();
-    normalizeConnectionsSymmetric();
-    rebuildGroups();
-  }
-  function rebuildGroups(){
-    const n=pieces.length, visited=new Array(n).fill(false);
-    for (let i=0;i<n;i++){
-      if (visited[i]) continue;
-      const q=[i]; visited[i]=true; const members=[i];
-      while(q.length){
-        const u=q.shift(); const U=pieces[u];
-        for (const k of DIRS){
-          const c=U.connections[k]; if(!c) continue;
-          const v=pieces.findIndex(pp=>pp.id===c.peerId);
-          if (v<0 || visited[v]) continue;
-          visited[v]=true; q.push(v); members.push(v);
-        }
-      }
-      const newId = ++nextGroupId;
-      members.forEach(idx=> pieces[idx].groupId = newId);
-    }
-  }
-
   function translateGroup(gid,dx,dy){ pieces.forEach(p=>{ if(p.groupId===gid){ p.x+=dx; p.y+=dy; }}); }
   function isComplement(a,b){ return (a==='male'&&b==='female')||(a==='female'&&b==='male'); }
 
@@ -836,8 +774,8 @@ nums1.addEventListener('mousemove',e=>{
     const bondish = isBond(a) || isBond(b);
     const rotated = (isBond(a) && (a.angle||0)%360 !== 0) || (isBond(b) && (b.angle||0)%360 !== 0);
     const boatish = (a.kind==='boat' || b.kind==='boat');
-    if (rotated) return Math.max(10, 10);
-    return (bondish || boatish) ? 10 : 2.2;
+    if (rotated) return Math.max(SOFT_SNAP_DIST, 12);
+    return (bondish || boatish) ? SOFT_SNAP_DIST : SNAP_DIST;
   }
 
   let snapEffects = [];
@@ -850,8 +788,68 @@ nums1.addEventListener('mousemove',e=>{
     if (stillFx || stillRing){ requestAnimationFrame(tick); } else { animating=false; }
   }
 
+  function mergeGroups(gKeep,gMove){ if(gKeep===gMove) return; pieces.forEach(p=>{ if(p.groupId===gMove) p.groupId=gKeep; }); }
+  function rebuildGroups(){
+    const n=pieces.length, visited=new Array(n).fill(false);
+    for (let i=0;i<n;i++){
+      if (visited[i]) continue;
+      const q=[i]; visited[i]=true; const members=[i];
+      while(q.length){
+        const u=q.shift(); const U=pieces[u];
+        for (const k of DIRS){
+          const c=U.connections[k]; if(!c) continue;
+          const v=pieces.findIndex(pp=>pp.id===c.peerId);
+          if (v<0 || visited[v]) continue;
+          visited[v]=true; q.push(v); members.push(v);
+        }
+      }
+      const newId = ++nextGroupId;
+      members.forEach(idx=> pieces[idx].groupId = newId);
+    }
+  }
+
+  function cleanupOrphanEngagements() {
+    for (const P of pieces) {
+      for (const s of DIRS) {
+        const c = P.connections?.[s] || null;
+        if (!c && P.engaged && P.engaged[s]) P.engaged[s] = false;
+      }
+    }
+  }
+  function normalizeConnectionsSymmetric() {
+    const id2idx = new Map(pieces.map((p,i)=>[p.id,i]));
+    const typeOf = (P, side)=> (P?.connectors?.[side] || 'none');
+    const isCompl = (a,b)=> (a==='male'&&b==='female')||(a==='female'&&b==='male');
+
+    for (const P of pieces){
+      for (const s of DIRS){
+        const c = P.connections?.[s];
+        if (!c){ P.engaged[s]=false; continue; }
+        const j = id2idx.get(c.peerId);
+        if (j===undefined) { P.connections[s]=null; P.engaged[s]=false; continue; }
+        const Q = pieces[j];
+        const back = Q.connections?.[c.peerSide];
+        const tA = typeOf(P,s), tB = typeOf(Q,c.peerSide);
+
+        if (!back || back.peerId !== P.id || !isCompl(tA,tB)){
+          P.connections[s]=null; P.engaged[s]=false;
+          if (Q.connections && Q.engaged){
+            Q.connections[c.peerSide]=null; Q.engaged[c.peerSide]=false;
+          }
+        } else {
+          P.engaged[s]=true; Q.engaged[c.peerSide]=true;
+        }
+      }
+    }
+  }
+  function hardReenablePorts(){
+    cleanupOrphanEngagements();
+    normalizeConnectionsSymmetric();
+    rebuildGroups();
+  }
+
   function trySnapGroup(gid){
-    const members = pieces.filter(p=>p.groupId===gid);
+    const members = groupMembers(gid);
     for (const A of members){
       for (const B of pieces){
         if (B.groupId === gid) continue;
@@ -872,8 +870,8 @@ nums1.addEventListener('mousemove',e=>{
           if (dist <= R){
             translateGroup(gid, dx, dy);
 
-            const Ai = pieces.findIndex(p=>p.id===A.id);
-            const Bi = pieces.findIndex(p=>p.id===B.id);
+            const Ai = findIndexById(A.id);
+            const Bi = findIndexById(B.id);
             if (Ai < 0 || Bi < 0) continue;
             const A2 = pieces[Ai];
             const B2 = pieces[Bi];
@@ -884,9 +882,7 @@ nums1.addEventListener('mousemove',e=>{
             B2.engaged[pr.bKey] = true;
 
             addSnapEffect(bPt.x, bPt.y);
-            // merge gruppi
-            const gKeep = A2.groupId, gMove = B2.groupId;
-            pieces.forEach(p=>{ if(p.groupId===gMove) p.groupId=gKeep; });
+            mergeGroups(A2.groupId, B2.groupId);
             hardReenablePorts();
             return true;
           }
@@ -903,40 +899,41 @@ nums1.addEventListener('mousemove',e=>{
     const cx=a.x+a.w/2, cy=a.y+a.h/2;
     ctx.translate(cx,cy); if(angle) ctx.rotate(angle*Math.PI/180); ctx.translate(-a.w/2,-a.h/2);
     if (a.kind!=='boat'){ ctx.fillStyle='#fff'; ctx.fillRect(0,0,a.w,a.h); }
-    ctx.fillStyle='#000'; ctx.strokeStyle='#000'; ctx.lineWidth=2; ctx.textBaseline='middle'; ctx.font=FONT;
+    ctx.fillStyle=ATOM_COLOR; ctx.strokeStyle=ATOM_COLOR; ctx.lineWidth=2; ctx.textBaseline='middle'; ctx.font=FONT;
     if (a.kind==='boat'){
-      const vs=(function(a){const x=a.x,y=a.y;return[{x:x+40,y:y+135},{x:x+140,y:y+60},{x:x+260,y:y+95},{x:x+395,y:y+180},{x:x+300,y:y+235},{x:x+170,y:y+205}];})(a);
-      ctx.beginPath(); ctx.moveTo(vs[0].x-a.x,vs[0].y-a.y);
-      for(let k=1;k<vs.length;k++) ctx.lineTo(vs[k].x-a.x,vs[k].y-a.y);
-      ctx.closePath(); ctx.stroke();
+      const vs=boatVertices({x:0,y:0,w:a.w,h:a.h});
+      ctx.beginPath(); ctx.moveTo(vs[0].x,vs[0].y); for(let k=1;k<vs.length;k++) ctx.lineTo(vs[k].x,vs[k].y); ctx.closePath(); ctx.stroke();
     }else{
       const lab=labelOf(a.kind); const tw=ctx.measureText(lab).width;
       ctx.fillText(lab,(a.w-tw)/2,a.h/2);
     }
     ctx.restore();
-    if (showPorts) {
-      const ports=getPorts(a);
-      for (const side in ports){
-        const t=a.connectors?.[side]||'none'; if (t==='none') continue;
-        const pt=ports[side]; const engaged=!!a.engaged[side];
-        ctx.save(); ctx.lineWidth=2;
-        if (t==='female'){
-          ctx.beginPath(); ctx.arc(pt.x,pt.y,4,0,Math.PI*2);
-          engaged ? (ctx.fillStyle='rgba(56,142,60,.8)', ctx.fill()) : (ctx.strokeStyle='rgba(56,142,60,.9)', ctx.stroke());
-        }else{
-          const r=4;
-          engaged ? (ctx.fillStyle='rgba(56,142,60,.8)', ctx.fillRect(pt.x-r,pt.y-r,r*2,r*2))
-                  : (ctx.strokeStyle='rgba(56,142,60,.9)', ctx.strokeRect(pt.x-r,pt.y-r,r*2,r*2));
-        }
-        ctx.restore();
+    if (showPorts) drawPorts(a);
+  }
+  function drawPorts(a){
+    const ports=getPorts(a);
+    for (const side in ports){
+      const t=a.connectors?.[side]||'none'; if (t==='none') continue;
+      const pt=ports[side]; const engaged=!!a.engaged[side];
+      ctx.save(); ctx.lineWidth=2;
+      if (t==='female'){
+        ctx.beginPath(); ctx.arc(pt.x,pt.y,4,0,Math.PI*2);
+        engaged ? (ctx.fillStyle='rgba(56,142,60,.8)', ctx.fill()) : (ctx.strokeStyle='rgba(56,142,60,.9)', ctx.stroke());
+      }else{
+        const r=4;
+        engaged ? (ctx.fillStyle='rgba(56,142,60,.8)', ctx.fillRect(pt.x-r,pt.y-r,r*2,r*2))
+                : (ctx.strokeStyle='rgba(56,142,60,.9)', ctx.strokeRect(pt.x-r,pt.y-r,r*2,r*2));
       }
+      ctx.restore();
     }
   }
 
   function draw(ts){
     ctx.clearRect(0,0,costruCanvas.width,costruCanvas.height);
     pieces.forEach(p=>drawPiece(p));
-    ctx.fillStyle='#2e7d32'; ctx.font='bold 16px Arial';
+
+    ctx.fillStyle='#2e7d32';
+    ctx.font='bold 16px Arial';
     numbers2.forEach(n => { ctx.fillText(n.text, n.x-4, n.y+6); });
 
     if (snapEffects.length){
@@ -962,12 +959,14 @@ nums1.addEventListener('mousemove',e=>{
     if (a.kind!=='boat'){
       return (x>=a.x && x<=a.x+a.w && y>=a.y && y<=a.y+a.h);
     }
-    const vs=[{x:a.x+40,y:a.y+135},{x:a.x+140,y:a.y+60},{x:a.x+260,y:a.y+95},{x:a.x+395,y:a.y+180},{x:a.x+300,y:a.y+235},{x:a.x+170,y:a.y+205}];
-    ctx.save(); ctx.beginPath(); ctx.moveTo(vs[0].x,vs[0].y);
+    const vs=boatVertices(a);
+    ctx.save();
+    ctx.beginPath(); ctx.moveTo(vs[0].x,vs[0].y);
     for(let i=1;i<vs.length;i++) ctx.lineTo(vs[i].x,vs[i].y);
     ctx.closePath();
     const inside = ctx.isPointInPath(x,y) || ctx.isPointInStroke(x,y);
-    ctx.restore(); return inside;
+    ctx.restore();
+    return inside;
   }
 
   function nextGridPos2(canvasWidth, margin=30, step=28, count=0){
@@ -987,7 +986,7 @@ nums1.addEventListener('mousemove',e=>{
       const c=A.connections?.[s];
       A.engaged[s]=false; A.connections[s]=null;
       if(c){
-        const j=pieces.findIndex(p=>p.id===c.peerId);
+        const j=findIndexById(c.peerId);
         if(j>=0){
           const B=pieces[j];
           if (B.connections && B.engaged){ B.connections[c.peerSide]=null; B.engaged[c.peerSide]=false; }
@@ -1000,7 +999,6 @@ nums1.addEventListener('mousemove',e=>{
     const beforeN = numbers2.length;
     numbers2 = numbers2.filter(n => Math.hypot(n.x-x,n.y-y) > 9);
     if (numbers2.length !== beforeN){ draw(); saveWorkForQuestion(); return; }
-
     for (let i=pieces.length-1;i>=0;i--){
       const p=pieces[i];
       if (pieceHitTest(p,x,y)){
@@ -1016,7 +1014,10 @@ nums1.addEventListener('mousemove',e=>{
     }
   }
 
-  function saveWorkForQuestion(){ localStorage.setItem(keyQ(qIndex), JSON.stringify({ pieces, numbers2 })); }
+  function saveWorkForQuestion(){
+    const payload = { pieces, numbers2 };
+    localStorage.setItem(keyQ(qIndex), JSON.stringify(payload));
+  }
 
   function connectorsFor(kind){
     const none = {N:'none',S:'none',E:'none',W:'none',A1:'none',A2:'none',A3:'none',A4:'none',A5:'none',A6:'none',EQ1:'none',EQ2:'none',EQ3:'none',EQ4:'none',EQ5:'none',EQ6:'none'};
@@ -1036,6 +1037,7 @@ nums1.addEventListener('mousemove',e=>{
     DIRS.forEach(d=>{ base.engaged[d]=false; base.connections[d]=null; });
     return base;
   }
+
   function sanitizeGraph(){
     const ids = new Set(pieces.map(p=>p.id));
     const typeOf = (P, side)=> (P?.connectors?.[side] || 'none');
@@ -1045,7 +1047,10 @@ nums1.addEventListener('mousemove',e=>{
       for (const s of DIRS){
         const c = P.connections?.[s];
         if (!c){ P.connections[s]=null; P.engaged[s]=false; continue; }
-        if (!ids.has(c.peerId)){ P.connections[s] = null; P.engaged[s] = false; }
+        if (!ids.has(c.peerId)){
+          P.connections[s] = null;
+          P.engaged[s] = false;
+        }
       }
     }
     for (const P of pieces){
@@ -1081,7 +1086,8 @@ nums1.addEventListener('mousemove',e=>{
   function addByKind(kind){
     eraser=false; erasingHeld=false; cur.clearRect(0,0,costruCursor.width,costruCursor.height);
     const ebtn=document.getElementById('eraser2'); if (ebtn) ebtn.classList.remove('danger');
-    let p; if (kind==='boat') p=createBoat();
+    let p;
+    if (kind==='boat') p=createBoat();
     else if (kind.startsWith('bond')) p=createBond(kind);
     else p=createStandard(kind);
     pieces.push(p); selected=isBond(p)?p:null; draw(); saveWorkForQuestion();
@@ -1093,7 +1099,8 @@ nums1.addEventListener('mousemove',e=>{
   document.getElementById('clear2')?.addEventListener('click',()=>{
     pieces=[]; numbers2=[]; selected=null; eraser=false; erasingHeld=false;
     cur.clearRect(0,0,costruCursor.width,costruCursor.height);
-    sanitizeGraph(); hardReenablePorts();
+    sanitizeGraph();
+    hardReenablePorts();
     draw(); saveWorkForQuestion();
   });
 
@@ -1106,65 +1113,142 @@ nums1.addEventListener('mousemove',e=>{
   });
   document.getElementById('rotCW2')?.addEventListener('click',()=>{ 
     eraser=false; eraserBtn2.classList.remove('danger'); 
-    if (selected && isBond(selected)){ selected.angle=(selected.angle+15)%360; hardReenablePorts(); draw(); saveWorkForQuestion(); } 
+    if (selected && isBond(selected)){ 
+      selected.angle=(selected.angle+15)%360; 
+      hardReenablePorts();
+      draw(); saveWorkForQuestion(); 
+    } 
   });
   document.getElementById('rotCCW2')?.addEventListener('click',()=>{ 
     eraser=false; eraserBtn2.classList.remove('danger'); 
-    if (selected && isBond(selected)){ selected.angle=(selected.angle-15+360)%360; hardReenablePorts(); draw(); saveWorkForQuestion(); } 
+    if (selected && isBond(selected)){ 
+      selected.angle=(selected.angle-15+360)%360; 
+      hardReenablePorts();
+      draw(); saveWorkForQuestion(); 
+    } 
   });
 
   function toCanvas(e){ const r=costruCanvas.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top}; }
+
   costruCanvas.addEventListener('mousemove',e=>{
     if (eraser){
       if (erasingHeld){
         const {x,y}=toCanvas(e);
-        cursorRing.x=x; cursorRing.y=y; tryEraseAt(x,y); draw();
-      } return;
+        cursorRing.x=x; cursorRing.y=y;
+        tryEraseAt(x,y);
+        draw();
+      }
+      return;
     }
-    if (dragNum2){ const {x,y}=toCanvas(e); dragNum2.x=x; dragNum2.y=y; draw(); return; }
+    if (dragNum2){
+      const {x,y}=toCanvas(e);
+      dragNum2.x=x; dragNum2.y=y; draw();
+      return;
+    }
     if (!drag) return;
     const {x,y}=toCanvas(e);
-    const A=pieces[drag.index]; const nx=x-drag.ox, ny=y-drag.oy; const dx=nx-A.x, dy=ny-A.y;
-    const hasConnStrict = Object.values(A.connections||{}).some(c => c && pieces.findIndex(p=>p.id===c.peerId) >= 0);
-    if (hasConnStrict){ const comp = connectedComponentForPiece(A); comp.forEach(p => { p.x += dx; p.y += dy; }); }
-    else { A.x += dx; A.y += dy; }
-    trySnapGroup(A.groupId); draw();
+    const A=pieces[drag.index];
+    const nx=x-drag.ox, ny=y-drag.oy;
+    const dx=nx-A.x, dy=ny-A.y;
+
+    const hasConnStrict = Object.values(A.connections||{}).some(c => c && findIndexById(c.peerId) >= 0);
+    if (hasConnStrict){
+      const comp = connectedComponentForPiece(A);
+      comp.forEach(p => { p.x += dx; p.y += dy; });
+    } else {
+      A.x += dx; A.y += dy;
+    }
+
+    if (typeof trySnapGroup === 'function') trySnapGroup(A.groupId);
+    draw();
   });
+
   costruCanvas.addEventListener('mousedown',e=>{
     const {x,y}=toCanvas(e);
-    if (eraser){ erasingHeld = true; cursorRing.x = x; cursorRing.y = y; tryEraseAt(x,y); draw(); return; }
-    const n = hitNum2(x,y); if (n){ dragNum2=n; return; }
-    const idx=selectAt(x,y); if (idx===-1) return; const p=pieces[idx]; drag={index:idx, ox:x-p.x, oy:y-p.y};
+    if (eraser){
+      erasingHeld = true;
+      cursorRing.x = x; cursorRing.y = y;
+      tryEraseAt(x,y);
+      draw();
+      return;
+    }
+    const n = hitNum2(x,y);
+    if (n){ dragNum2=n; return; }
+    const idx=selectAt(x,y); if (idx===-1) return;
+    const p=pieces[idx]; drag={index:idx, ox:x-p.x, oy:y-p.y};
   });
   window.addEventListener('mouseup',()=>{
-    if (eraser){ erasingHeld=false; cur.clearRect(0,0,costruCursor.width,costruCursor.height); draw(); }
-    if (drag){ drag=null; hardReenablePorts(); saveWorkForQuestion(); }
+    if (eraser){
+      erasingHeld=false;
+      cur.clearRect(0,0,costruCursor.width,costruCursor.height);
+      draw();
+    }
+    if (drag){ 
+      drag=null; 
+      hardReenablePorts();
+      saveWorkForQuestion(); 
+    }
     if (dragNum2){ dragNum2=null; saveWorkForQuestion(); }
   });
-  costruCanvas.addEventListener('mouseleave', ()=>{ if (eraser){ erasingHeld=false; cur.clearRect(0,0,costruCursor.width,costruCursor.height); draw(); } if (dragNum2){ dragNum2=null; saveWorkForQuestion(); } });
+  costruCanvas.addEventListener('mouseleave', ()=>{
+    if (eraser){
+      erasingHeld=false;
+      cur.clearRect(0,0,costruCursor.width,costruCursor.height);
+      draw();
+    }
+    if (dragNum2){ dragNum2=null; saveWorkForQuestion(); }
+  });
 
   function toTouch(t){ const r=costruCanvas.getBoundingClientRect(); return {x:t.clientX-r.left, y:t.clientY-r.top}; }
   costruCanvas.addEventListener('touchmove',e=>{
     if(!e.touches.length) return;
     const {x,y}=toTouch(e.touches[0]);
-    if (eraser){ if (erasingHeld){ cursorRing.x=x; cursorRing.y=y; tryEraseAt(x,y); draw(); } return; }
-    if (dragNum2){ dragNum2.x=x; dragNum2.y=y; draw(); return; }
+    if (eraser){
+      if (erasingHeld){
+        cursorRing.x=x; cursorRing.y=y;
+        tryEraseAt(x,y);
+        draw();
+      }
+      return;
+    }
+    if (dragNum2){
+      dragNum2.x=x; dragNum2.y=y; draw(); return;
+    }
     if (!drag) return;
-    const A=pieces[drag.index]; const nx=x-drag.ox, ny=y-drag.oy; const dx=nx-A.x, dy=ny-A.y;
-    const hasConnStrict = Object.values(A.connections||{}).some(c => c && pieces.findIndex(p=>p.id===c.peerId) >= 0);
-    if (hasConnStrict){ const comp = connectedComponentForPiece(A); comp.forEach(p => { p.x += dx; p.y += dy; }); }
-    else { A.x += dx; A.y += dy; }
-    trySnapGroup(A.groupId); draw();
+    const A=pieces[drag.index];
+    const nx=x-drag.ox, ny=y-drag.oy; const dx=nx-A.x, dy=ny-A.y;
+
+    const hasConnStrict = Object.values(A.connections||{}).some(c => c && findIndexById(c.peerId) >= 0);
+    if (hasConnStrict){
+      const comp = connectedComponentForPiece(A);
+      comp.forEach(p => { p.x += dx; p.y += dy; });
+    } else {
+      A.x += dx; A.y += dy;
+    }
+
+    if (typeof trySnapGroup === 'function') trySnapGroup(A.groupId);
+    draw();
   },{passive:true});
   costruCanvas.addEventListener('touchstart',e=>{
     if(!e.touches.length) return; const {x,y}=toTouch(e.touches[0]);
-    if (eraser){ erasingHeld=true; cursorRing.x=x; cursorRing.y=y; draw(); tryEraseAt(x,y); return; }
-    const n = hitNum2(x,y); if (n){ dragNum2=n; return; }
+    if (eraser){
+      erasingHeld=true; cursorRing.x=x; cursorRing.y=y; draw(); tryEraseAt(x,y); return;
+    }
+    const n = hitNum2(x,y);
+    if (n){ dragNum2=n; return; }
     const idx=selectAt(x,y); if (idx===-1) return; const p=pieces[idx]; drag={index:idx, ox:x-p.x, oy:y-p.y};
   },{passive:true});
   costruCanvas.addEventListener('touchend',()=>{
-    if (eraser){ erasingHeld=false; cur.clearRect(0,0,costruCursor.width,costruCursor.height); draw(); }
-    if (drag){ drag=null; hardReenablePorts(); saveWorkForQuestion(); }
+    if (eraser){
+      erasingHeld=false;
+      cur.clearRect(0,0,costruCursor.width,costruCursor.height);
+      draw();
+    }
+    if (drag){ 
+      drag=null; 
+      hardReenablePorts();
+      saveWorkForQuestion(); 
+    }
     if (dragNum2){ dragNum2=null; saveWorkForQuestion(); }
   },{passive:true});
 
@@ -1187,72 +1271,14 @@ nums1.addEventListener('mousemove',e=>{
 </script>
 
 <script>
-/* ===== NLP Helpers (IT) ===== */
-function tokenizeIT(s){
-  return (s||'').toLowerCase()
-    .replace(/[^\wàèéìòóùç\-]+/g,' ')
-    .split(/\s+/).filter(Boolean);
-}
-// Estrai feature da un nome IUPAC "italianizzato"
-function parseNameFeaturesItalian(s){
-  const t = tokenizeIT(s);
-  const feats = new Set();
-  const chainMap = {
-    'met':1,'et':2,'prop':3,'but':4,'pent':5,'penta':5,'es':6,'esa':6,'ept':7,'epta':7,'ott':8,'otta':8,'non':9,'nona':9,'dec':10,'deca':10
-  };
-  const subs = ['metil','etil','propil','butil'];
-  const halos = ['cloro','bromo','fluoro','iodo','ioduro','clor','brom','fluor','iod'];
-
-  // insaturazioni
-  if (t.some(w=>/ene$/.test(w))) feats.add('ene');
-  if (t.some(w=>/ino$/.test(w))) feats.add('ino');
-
-  // ciclo
-  if (t.some(w=>w.includes('ciclo'))) feats.add('ciclo');
-
-  // sostituenti e alogeni
-  subs.forEach(su => { if (t.some(w=>w.includes(su))) feats.add('sub_'+su); });
-  halos.forEach(h => { if (t.some(w=>w.startsWith(h))) feats.add('halo_'+h.slice(0,2)); }); // cl, br, fl, io
-
-  // lunghezza catena principale (best-effort)
-  for (const [k,v] of Object.entries(chainMap)){
-    if (t.some(w=>w.includes(k))) { feats.add('C'+v); break; }
-  }
-
-  // posizioni numeriche (1..20)
-  const nums = (s.match(/\b\d+\b/g)||[]).map(x=>parseInt(x,10));
-  nums.forEach(n=>feats.add('pos'+n));
-
-  return feats;
-}
-// Deriva feature dalla struttura costruita
-function featuresFromStructureCounts(cnt){
-  const feats = new Set();
-  // catena principale approssimata dal numero di C (grezzo)
-  if (cnt.C>0) feats.add('C'+Math.min(cnt.C,10));
-  if ((cnt.bonds||{})['=']>0) feats.add('ene');
-  if ((cnt.bonds||{})['≡']>0) feats.add('ino');
-  if (cnt.Cl>0) feats.add('halo_cl');
-  if (cnt.Br>0) feats.add('halo_br');
-  if (cnt.F>0)  feats.add('halo_fl');
-  if (cnt.I>0)  feats.add('halo_io');
-  return feats;
-}
-function jaccard(aSet,bSet){
-  const a=new Set(aSet), b=new Set(bSet);
-  const inter=[...a].filter(x=>b.has(x)).length;
-  const uni=new Set([...a,...b]).size;
-  if (uni===0) return 0;
-  return inter/uni;
-}
-</script>
-
-<script>
-/* ===== Utility immagine per valutazione Sezione 1 ===== */
+/* ===== Utility immagine per valutazione Sezione 1 (solo tratti + numeri) ===== */
+// luminanza per "quasi bianco"
 function luma601(r,g,b){ return 0.299*r + 0.587*g + 0.114*b; }
+
 function loadImageData(src, w, h){
   return new Promise(res=>{
     const img=new Image();
+    img.crossOrigin="anonymous";
     img.onload=()=>{
       const cw=w||img.width, ch=h||img.height;
       const c=document.createElement('canvas'); c.width=cw; c.height=ch;
@@ -1275,12 +1301,12 @@ function dataUrlToImageData(dataUrl){
     img.src=dataUrl||'';
   });
 }
-function maskFromAlpha(img, thr=16){
+function maskFromAlpha(img, thr=12){
   const {data,width,height}=img; const out=new Uint8Array(width*height);
   for(let i=0,px=0;i<data.length;i+=4,px++){ out[px] = (data[i+3]>=thr)?1:0; }
   return {mask:out,width,height};
 }
-function maskFromNonWhite(img, whiteTol=250){
+function maskFromNonWhite(img, whiteTol=252){
   const {data,width,height}=img; const out=new Uint8Array(width*height);
   for(let i=0,px=0;i<data.length;i+=4,px++){
     const a=data[i+3]; if(a===0){ out[px]=0; continue; }
@@ -1288,8 +1314,8 @@ function maskFromNonWhite(img, whiteTol=250){
   }
   return {mask:out,width,height};
 }
-// dilatazione più generosa
-function dilate(mask, w, h, radius=2) {
+// dilatazione generosa
+function dilate(mask, w, h, radius=3) {
   const out = new Uint8Array(mask.length);
   for (let y=0; y<h; y++) {
     for (let x=0; x<w; x++) {
@@ -1309,7 +1335,7 @@ function dilate(mask, w, h, radius=2) {
   }
   return out;
 }
-function dilateN(mask, w, h, radius=2, steps=2){
+function dilateN(mask, w, h, radius=3, steps=3){
   let cur = mask;
   for (let s=0; s<steps; s++) cur = dilate(cur, w, h, radius);
   return cur;
@@ -1325,13 +1351,13 @@ async function scoreStrokesOverlap(studentDataUrl, teacherPngUrl){
   if(!stud) return 0;
   const teach = await loadImageData(teacherPngUrl, stud.width, stud.height);
   if(!teach) return 0;
-  const A = maskFromAlpha(stud);
-  const B = maskFromNonWhite(teach, 250);
-  const Ad = dilateN(A.mask, A.width, A.height, 2, 2);
-  const Bd = dilateN(B.mask, B.width, B.height, 2, 2);
+  const A = maskFromAlpha(stud, 10);
+  const B = maskFromNonWhite(teach, 252);
+  const Ad = dilateN(A.mask, A.width, A.height, 3, 3);
+  const Bd = dilateN(B.mask, B.width, B.height, 3, 3);
   return diceScore(Ad, Bd);
 }
-function scoreNumbersSequence(expectedArr, studentNums, tol=16){
+function scoreNumbersSequence(expectedArr, studentNums, tol=18){
   if(!expectedArr || !expectedArr.length) return 0;
   const matchedIdx=[]; let hit=0;
   expectedArr.forEach((exp, idx)=>{
@@ -1348,6 +1374,41 @@ function scoreNumbersSequence(expectedArr, studentNums, tol=16){
   const maxInv = matchedIdx.length*(matchedIdx.length-1)/2;
   const ordScore = maxInv? (1 - inv/maxInv) : 1;
   return 0.5*posScore + 0.5*ordScore;
+}
+
+/* === “NLP leggera” per nomenclatura (Sez. 1) === */
+// Normalizza, tokenizza, sinonimi base (dicloro <-> 2 cloro, etc.)
+const SYN_MAP = {
+  'bromo':'br','cloro':'cl','fluoro':'f','iodo':'i','idro':'h','metil':'ch3','etil':'c2h5','propil':'c3h7',
+  'dibromo':'2br','dicloro':'2cl','tricloro':'3cl','tetra':'4',
+  'esano':'c6','ottano':'c8','eptano':'c7','esene':'c6=','esino':'c6≡','ottano':'c8'
+};
+function normalizeText(s){
+  return (s||'').toLowerCase()
+    .replace(/[àáä]/g,'a').replace(/[èéë]/g,'e').replace(/[ìíï]/g,'i')
+    .replace(/[òóö]/g,'o').replace(/[ùúü]/g,'u')
+    .replace(/[^a-z0-9,\-\s]/g,' ')
+    .replace(/\s+/g,' ')
+    .trim();
+}
+function nlpTokens(s){
+  s = normalizeText(s);
+  const raw = s.split(/[\s\-\,]+/).filter(Boolean);
+  return raw.map(t=>SYN_MAP[t]||t);
+}
+function nlpSimilarity(a,b){
+  const A = new Set(nlpTokens(a));
+  const B = new Set(nlpTokens(b));
+  if (!A.size && !B.size) return 1;
+  let inter=0;
+  A.forEach(x=>{ if(B.has(x)) inter++; });
+  const jacc = inter / (A.size + B.size - inter || 1);
+  // Arrotondiamo “verso l’alto” per essere meno rigidi
+  if (jacc>=0.85) return 1.0;
+  if (jacc>=0.65) return 0.85;
+  if (jacc>=0.45) return 0.65;
+  if (jacc>=0.25) return 0.40;
+  return 0.0;
 }
 </script>
 
@@ -1427,10 +1488,9 @@ function renderBuildSnapshot(payload, width=800, height=500){
 </script>
 
 <script>
-/* ===== Valutazione & Riepilogo + consegna (+ NLP + Lock) ===== */
+/* ===== Valutazione & Riepilogo + consegna + PIN ===== */
 function editDistance(a,b){const dp=Array.from({length:b.length+1},(_,j)=>j);for(let i=1;i<=a.length;i++){let prev=i-1;dp[0]=i;for(let j=1;j<=b.length;j++){const tmp=dp[j];const cost=a[i-1]===b[j-1]?0:1;dp[j]=Math.min(dp[j]+1,dp[j-1]+1,prev+cost);prev=tmp;}}return dp[b.length];}
 function simFine(a,b){a=(a||'').toLowerCase().trim();b=(b||'').toLowerCase().trim();const L=Math.max(a.length,b.length);if(L===0)return 1;const ed=editDistance(a,b);const s=(L-ed)/L;if(s>=0.90)return 1.0;if(s>=0.75)return 0.75;if(s>=0.50)return 0.50;if(s>=0.25)return 0.25;return 0.0;}
-
 function countAtoms(listOrObj){
   let list = [];
   if (Array.isArray(listOrObj)){
@@ -1465,8 +1525,15 @@ function countAtoms(listOrObj){
   return cnt;
 }
 
-/* Sezione 2: struttura → punteggio (senza 0.25 minimo) */
-function scoreBuildStructOnly(exp, got) {
+/* Tolleranza “semantica” per Sezione 2 (±1 sugli attesi non-zero) */
+function tolerantRatio(expected, got){
+  if (expected===0 && got===0) return 1;
+  if (expected===0 && got>0) return 0;
+  const lo = Math.max(0, expected-1), hi = expected+1;
+  if (got>=lo && got<=hi) return 1; // dentro margine
+  return Math.min(got, expected) / Math.max(expected, 1);
+}
+function scoreBuild(exp, got) {
   const atomKeys = ['C','H','Cl','Br','F','I'];
   const bondKeys = ['—','=','≡'];
   const parts = [];
@@ -1474,53 +1541,61 @@ function scoreBuildStructOnly(exp, got) {
   atomKeys.forEach(k => {
     const e = exp[k] || 0;
     const g = got[k] || 0;
-    if (e>0 || g>0) {
-      if (e===0 && g>0) parts.push(0);
-      else parts.push(Math.min(g, e) / Math.max(e, 1));
-    }
+    if (e>0 || g>0) parts.push(tolerantRatio(e,g));
   });
   bondKeys.forEach(sym => {
     const expB = (exp.bonds || '').split('').filter(s => s === sym).length;
     const gotB = (got.bonds || {})[sym] || 0;
-    if (expB>0 || gotB>0) {
-      if (expB===0 && gotB>0) parts.push(0);
-      else parts.push(Math.min(gotB, expB) / Math.max(expB, 1));
-    }
+    if (expB>0 || gotB>0) parts.push(tolerantRatio(expB, gotB));
   });
 
   const totalAtoms = atomKeys.reduce((a,k)=>a+(got[k]||0),0);
   const totalBonds = bondKeys.reduce((a,k)=>a+((got.bonds||{})[k]||0),0);
-  const hasStructure = (totalAtoms + totalBonds) >= 3;
-  if (!hasStructure) return 0.0;
+  const hasStructure = (totalAtoms + totalBonds) >= 2; // soglia un filo più bassa
 
+  if (!hasStructure) return 0.0;
   if (parts.length === 0) return 0.0;
+
   const avg = parts.reduce((a,c)=>a+c,0) / parts.length;
   if (avg >= 0.90) return 1.0;
-  if (avg >= 0.75) return 0.75;
-  if (avg >= 0.50) return 0.50;
-  if (avg >= 0.25) return 0.25;
+  if (avg >= 0.75) return 0.85;
+  if (avg >= 0.50) return 0.65;
+  if (avg >= 0.25) return 0.40;
   return 0.0;
 }
 
-/* NLP: Sez.1 (testo) + Sez.2 (feature) */
-function nlpScoreTextVsCorrect(userText, correctText){
-  const fUser = parseNameFeaturesItalian(userText);
-  const fCorr = parseNameFeaturesItalian(correctText);
-  const jac = jaccard(fUser, fCorr);        // 0..1
-  const fine = simFine(userText, correctText); // 0..1 discretizzato
-  // fusione: bilanciata
-  return 0.5*fine + 0.5*jac;
-}
-function nlpScoreBuild(questionText, gotCounts){
-  const featsExpected = parseNameFeaturesItalian(questionText);
-  const featsGot = featuresFromStructureCounts(gotCounts);
-  return jaccard(featsExpected, featsGot); // 0..1
+/* ===== PIN handling ===== */
+const PIN_CODE = "5822";
+let isUnlocked = false;
+function showPinLock(){
+  const sec = document.getElementById('resultSection');
+  const dlg = document.getElementById('pinDialog');
+  const printBtn = document.getElementById('printBtn');
+  sec.classList.add('locked');
+  printBtn.disabled = true;
+  dlg.style.display='flex';
+  const input = document.getElementById('pinInput');
+  const err = document.getElementById('pinErr');
+  input.value='';
+  input.focus();
+  function tryUnlock(){
+    if (input.value.trim() === PIN_CODE){
+      isUnlocked = true;
+      sec.classList.remove('locked');
+      printBtn.disabled = false;
+      dlg.style.display='none';
+      err.textContent='';
+      enableLeaveWarning(true); // mantieni conferma uscita anche nel riepilogo
+    } else {
+      err.textContent='PIN errato.';
+      input.select();
+    }
+  }
+  document.getElementById('pinOk').onclick = tryUnlock;
+  input.onkeyup = (e)=>{ if(e.key==='Enter') tryUnlock(); };
 }
 
-/* ---- Consegna ---- */
-const UNLOCK_CODE = '5822';
-let resultLocked = true;
-
+/* ===== Consegna ===== */
 document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
   const sicuro = confirm('Sei sicuro di voler consegnare la verifica?\nPremi "OK" per consegnare o "Annulla" per tornare indietro.');
   if (!sicuro) return;
@@ -1552,19 +1627,18 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
       try{
         const saved = JSON.parse(localStorage.getItem('annota_'+file) || '{}');
 
-        const userTxt = (saved.text||'').trim();
+        const userTxtRaw = (saved.text||'').trim();
         const corr = correctNames[file] || '';
-
-        // NLP+fine per il testo
-        const sTextFine = userTxt ? simFine(userTxt, corr) : 0;
-        const sTextNLP  = userTxt ? nlpScoreTextVsCorrect(userTxt, corr) : 0;
-        const sText = 0.5*sTextFine + 0.5*sTextNLP; // 0..1
+        // Combina “NLP” (token/ sinonimi) con edit-distance
+        const sNLP = nlpSimilarity(userTxtRaw, corr);
+        const sED  = simFine(userTxtRaw, corr);
+        const sText = Math.max(sNLP, sED);  // scegli il migliore (più generoso)
 
         let sStrokes=0, sNums=0, sVis=0;
         const key = (window.answerKeys||{})[file];
         if (key && key.mask){
           sStrokes = await scoreStrokesOverlap(saved.strokes||'', key.mask);
-          sNums    = scoreNumbersSequence(key.numbers||[], saved.numbers||[], key.tol||16);
+          sNums    = scoreNumbersSequence(key.numbers||[], saved.numbers||[], key.tol||18);
           sVis     = (key.numbers && key.numbers.length) ? (0.5*sStrokes + 0.5*sNums) : sStrokes;
         }
 
@@ -1582,15 +1656,15 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
         txt.innerHTML = `
           <div><strong>${esc(file.replace('.jpg',''))}</strong></div>
           <div>🧠 Sezione 1 (max 2):
-            <span class="badge ${badgeTxt}" title="testo (NLP+sim)"> ${(sText*(window.W_TEXT||1)).toFixed(2)} / ${(window.W_TEXT||1)}</span>
+            <span class="badge ${badgeTxt}" title="testo">${(sText*(window.W_TEXT||1)).toFixed(2)} / ${(window.W_TEXT||1)}</span>
             +
-            <span class="badge ${badgeVis}" title="annotazioni visive"> ${(sVis*(window.W_VIS||1)).toFixed(2)} / ${(window.W_VIS||1)}</span>
+            <span class="badge ${badgeVis}" title="annotazioni visive">${(sVis*(window.W_VIS||1)).toFixed(2)} / ${(window.W_VIS||1)}</span>
             =
             <span class="badge ${pts>=1.5?'ok':(pts>=1?'warn':'err')}">${pts.toFixed(2)} / 2.00</span>
           </div>
           <div class="ansFieldWrap">
             <span class="ansLabel">Nome proposto dallo studente</span>
-            <input class="ansInput" type="text" readonly value="${userTxt ? esc(userTxt) : ''}" placeholder="(vuoto)"/>
+            <input class="ansInput" type="text" readonly value="${userTxtRaw ? esc(userTxtRaw) : ''}" placeholder="(vuoto)"/>
           </div>
           <div class="ansFieldWrap">
             <span class="ansLabel">Nome corretto</span>
@@ -1604,7 +1678,9 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
 
         card.appendChild(txt); card.appendChild(imgs);
         cont1.appendChild(card);
-      }catch(err){ console.warn('[Sez1]', file, err); }
+      }catch(err){
+        console.warn('[Sez1]', file, err);
+      }
     }
 
     /* ===== Sezione 2 ===== */
@@ -1626,14 +1702,14 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
         try{ payload = raw ? JSON.parse(raw) : null; }catch(_){ payload=null; }
 
         const got = countAtoms(payload || []);
-        const sStruct = scoreBuildStructOnly(q.expected, got);         // 0..1
-        const sNlp    = nlpScoreBuild(q.testo, got);                   // 0..1
-        const s       = 0.6*sStruct + 0.4*sNlp;                        // fusione
-        const pts     = +(s*1).toFixed(2);
+        const s = scoreBuild(q.expected, got);
+        const pts = +(s*1).toFixed(2);
         puntiSec2 += pts;
 
         let studPNG = '';
-        try{ if (payload) studPNG = renderBuildSnapshot(payload, 800, 500); }catch(_){}
+        try{
+          if (payload) studPNG = renderBuildSnapshot(payload, 800, 500);
+        }catch(_){ studPNG=''; }
 
         const card = document.createElement('div'); card.className='card';
         const txt = document.createElement('div');
@@ -1641,9 +1717,7 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
         txt.innerHTML = `
           <div><strong>Domanda ${idx+1}</strong></div>
           <div class="mini"><em>Richiesta:</em> ${esc(q.testo)}</div>
-          <div>⚗️ Costruzione (max 1): <span class="badge ${badge}">${pts} / 1</span>
-            <span class="mini">(struttura ${sStruct.toFixed(2)} · nlp ${sNlp.toFixed(2)})</span>
-          </div>
+          <div>⚗️ Costruzione (max 1): <span class="badge ${badge}">${pts} / 1</span></div>
         `;
 
         const imgs = document.createElement('div'); imgs.className='wide';
@@ -1652,7 +1726,9 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
 
         card.appendChild(txt); card.appendChild(imgs);
         cont2.appendChild(card);
-      }catch(err){ console.warn('[Sez2] domanda', idx+1, err); }
+      }catch(err){
+        console.warn('[Sez2] domanda', idx+1, err);
+      }
     }
 
     const tot = puntiSec1 + puntiSec2; // max 13
@@ -1666,17 +1742,13 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
       </div>
     `;
 
-    // Mostra riepilogo + abilita conferma uscita ANCHE qui
     document.getElementById('resultSection').style.display='block';
-    enableLeaveWarning(true);
+    enableLeaveWarning(true); // conferma-uscita anche nel riepilogo
 
-    // Blocca riepilogo finché non inserisci il codice
-    resultLocked = true;
-    const lock = document.getElementById('lockOverlay');
-    lock.classList.add('active');
-    lock.style.display='block';
+    // Blocca il riepilogo finché non si inserisce il PIN
+    showPinLock();
 
-    // Reset SALVATO ma mantieni video a schermo; NON spegnere l'avviso
+    // Reset risposte salvate, mantieni a schermo il riepilogo blurrato:
     resetAllProgress({keepResult:true});
 
   } catch (err){
@@ -1685,30 +1757,7 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
   }
 });
 
-/* Sblocco riepilogo */
-document.getElementById('unlockBtn').addEventListener('click', ()=>{
-  const inp = document.getElementById('unlockCode');
-  const msg = document.getElementById('unlockMsg');
-  if ((inp.value||'').trim() === UNLOCK_CODE){
-    resultLocked = false;
-    document.getElementById('lockOverlay').classList.remove('active');
-    document.getElementById('lockOverlay').style.display='none';
-    msg.textContent='';
-  } else {
-    msg.textContent='Codice errato';
-  }
-});
-
-/* Stampa con lock */
-document.getElementById('printBtn').addEventListener('click', ()=>{
-  if (resultLocked){
-    alert('Riepilogo bloccato. Inserisci il codice di sblocco per esportare il PDF.');
-    return;
-  }
-  window.print();
-});
-
-/* Torna alla home (reset totale) */
+// Torna alla schermata iniziale dal riepilogo (e reset totale)
 document.getElementById('backHomeBtn').addEventListener('click', ()=>{
   if (confirm('Tornare alla schermata iniziale cancellerà tutte le risposte salvate. Procedere?')) {
     resetAllProgress({keepResult:false});
