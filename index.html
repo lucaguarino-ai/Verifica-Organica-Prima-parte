@@ -24,6 +24,7 @@
   .indicator{ font-weight:bold; }
   .swatch{ width:28px; height:28px; border-radius:50%; border:2px solid #fff; outline:1px solid #333; cursor:pointer; }
   .swatch.sel{ box-shadow:0 0 0 2px #fff, 0 0 0 4px var(--accent) inset; }
+
   .numBtn{ background:var(--verde); color:#fff; width:30px; height:30px; border-radius:50%; font-weight:bold; }
 
   .stage{ position:relative; border:2px solid var(--bordo); background:#fff; border-radius:10px; overflow:hidden; box-shadow:0 2px 6px var(--ombra);}
@@ -73,16 +74,6 @@
     color:#0b3d0b;
   }
 
-  /* Overlay PIN */
-  #pinOverlay{
-    position:fixed; inset:0; background:rgba(0,0,0,.45); display:none; align-items:center; justify-content:center; z-index:9999;
-  }
-  #pinCard{
-    background:#fff; border:2px solid var(--bordo); border-radius:12px; padding:16px; width:min(90vw,360px); box-shadow:0 8px 20px var(--ombra);
-  }
-  #pinCard h3{ margin:0 0 10px; }
-  #pinInput{ width:100%; font-size:18px; letter-spacing:2px; text-align:center; }
-
   @media print{
     #studentSection, #sezione1, #sezione2, #studentInfoBar { display:none !important; }
     body{ background:#fff; }
@@ -104,10 +95,7 @@
   </div>
   <div class="space-between" style="justify-content:center;">
     <span id="oraInfo"></span>
-    <div>
-      <button id="iniziaBtn">Inizia Verifica</button>
-      <button id="resetAllBtn" title="Cancella tutto e torna all'inizio">Torna all'inizio (reset)</button>
-    </div>
+    <button id="iniziaBtn">Inizia Verifica</button>
   </div>
 </div>
 
@@ -207,15 +195,11 @@
       <span id="qIndicator" class="indicator">Domanda 1 di 3</span>
       <button id="nextQ">Avanti ⟶</button>
     </div>
-    <div>
-      <button id="draftBtn">💾 Salva bozza</button>
-      <button id="consegnaBtn">Consegna verifica</button>
-      <button id="backToStartBtn">Torna all'inizio (reset)</button>
-    </div>
+    <div><button id="consegnaBtn">Consegna verifica</button></div>
   </div>
 </div>
 
-<!-- RIEPILOGO (PIN gated) -->
+<!-- RIEPILOGO -->
 <div class="section" id="resultSection" style="display:none;">
   <h3>Riepilogo verifica</h3>
   <div id="anagrafica"></div><hr/>
@@ -223,49 +207,16 @@
   <h4>Sezione 2 – Costruzione</h4><div id="riepilogoCostru"></div>
   <h4>Totale</h4><div id="totali"></div>
   <div class="space-between">
-    <div>
-      <button id="resultBackBtn">Torna all'inizio (reset)</button>
-    </div>
-    <div>
-      <button id="printBtn" disabled title="Sblocca con PIN per abilitare">📄 Esporta PDF</button>
-    </div>
-  </div>
-</div>
-
-<!-- PIN overlay -->
-<div id="pinOverlay">
-  <div id="pinCard">
-    <h3>Inserisci PIN per sbloccare il riepilogo</h3>
-    <p style="margin:6px 0 10px;">PIN docente richiesto per visualizzare il riepilogo ed esportare il PDF.</p>
-    <input id="pinInput" type="password" maxlength="8" placeholder="PIN" />
-    <div style="text-align:right; margin-top:10px;">
-      <button id="pinCancel">Annulla</button>
-      <button id="pinOk">Sblocca</button>
-    </div>
+    <button id="backHomeBtn">⬅️ Torna alla schermata iniziale</button>
+    <button onclick="window.print()">📄 Esporta PDF</button>
   </div>
 </div>
 
 <script>
-/* ===== Utility & stato pagina ===== */
-const PIN_CODE = '5822';
-const urlParams = new URLSearchParams(location.search);
-const SETUP_NUM = urlParams.get('setupNumbers') === '1';
-
+/* ===== Utility ===== */
 function esc(s){return (s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
 function pad(n){return String(n).padStart(2,'0');}
 function fmtHMS(ms){const s=Math.floor(ms/1000);const h=Math.floor(s/3600);const m=Math.floor((s%3600)/60);const ss=s%60;return pad(h)+':'+pad(m)+':'+pad(ss);}
-function fmtTime(d){return d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});}
-
-function setUnsaved(on){ try{ localStorage.setItem('unsavedFlag', on ? '1':'0'); }catch(_){ } }
-function hasUnsaved(){ try{ return localStorage.getItem('unsavedFlag')==='1'; }catch(_){ return false; } }
-
-window.addEventListener('beforeunload', (e)=>{
-  // Avvisa se siamo nella verifica o nel riepilogo e ci sono dati "non finalizzati"
-  if (hasUnsaved()) {
-    e.preventDefault();
-    e.returnValue = '';
-  }
-});
 
 /* ===== Data e orari ===== */
 const today = new Date();
@@ -273,24 +224,46 @@ const dataEl=document.getElementById('data');
 if(dataEl) dataEl.value = today.toLocaleDateString('it-IT',{year:'numeric',month:'2-digit',day:'2-digit'});
 let startTime=null,endTime=null,timerInt=null;
 const studentInfoBar=document.getElementById('studentInfoBar');
+const fmtTime=d=>d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
 
-/* ===== Pulsanti reset ===== */
-function clearStudentWork(){
-  // cancella SOLO lavoro studente
-  try{
-    for (const k of Object.keys(localStorage)){
-      if (k.startsWith('annota_') || k.startsWith('build_q_')) localStorage.removeItem(k);
-    }
-  }catch(_){}
+/* ===== Avviso uscita & reset ===== */
+let warnOnUnload = false;
+function enableLeaveWarning(on){ warnOnUnload = !!on; }
+window.addEventListener('beforeunload', (e) => {
+  if (!warnOnUnload) return;
+  e.preventDefault();
+  e.returnValue = '';
+});
+function resetAllProgress(opts={}){
+  const keepResult = !!opts.keepResult;
+  // rimuovi risposte salvate
+  const toDelete = [];
+  for (let i=0;i<localStorage.length;i++){
+    const k = localStorage.key(i);
+    if (!k) continue;
+    if (k.startsWith('annota_') || k.startsWith('build_q_')) toDelete.push(k);
+  }
+  toDelete.forEach(k=>localStorage.removeItem(k));
+
+  // azzera UI
+  if (!keepResult){
+    try{
+      document.getElementById('resultSection').style.display='none';
+      document.getElementById('sezione1').style.display='none';
+      document.getElementById('sezione2').style.display='none';
+      document.getElementById('studentSection').style.display='block';
+      document.getElementById('studentInfoBar').style.display='none';
+    }catch(_){}
+    // campi anagrafica
+    ['nome','cognome','classe','data'].forEach(id=>{
+      const el=document.getElementById(id); if(el) el.value='';
+    });
+  }
+  // stop timer
+  try{ if(timerInt){ clearInterval(timerInt); timerInt=null; } }catch(_){}
+  // warning
+  enableLeaveWarning(false);
 }
-function resetAndReload(){
-  clearStudentWork();
-  setUnsaved(false);
-  location.href = location.pathname; // torna all'inizio (rimuove query)
-}
-document.getElementById('resetAllBtn').addEventListener('click', resetAndReload);
-document.getElementById('backToStartBtn').addEventListener('click', resetAndReload);
-document.getElementById('resultBackBtn').addEventListener('click', resetAndReload);
 
 /* ===== Avvio verifica ===== */
 document.getElementById('iniziaBtn').addEventListener('click', ()=>{
@@ -310,114 +283,11 @@ document.getElementById('iniziaBtn').addEventListener('click', ()=>{
   document.getElementById('sezione1').style.display='block';
   document.getElementById('sezione2').style.display='block';
 
+  enableLeaveWarning(true); // << avviso “lascia pagina” attivo durante la verifica
+
   loadMolecule(0);
   window.setQuestion && window.setQuestion(0);
-
-  setUnsaved(true);
 });
-
-// Salva bozza: in pratica è già auto-salvato, ma lasciamo un feedback
-document.getElementById('draftBtn').addEventListener('click', ()=>{
-  alert('Bozza salvata localmente. Puoi chiudere e tornare: i dati restano sul dispositivo.');
-  setUnsaved(true);
-});
-</script>
-
-<script>
-/* ===== Setup numerazione (admin) ===== */
-function keyAnsAnnota(file){ return 'ansNumbers_annota_' + file; }           // Sezione 1
-function keyAnsBuildQ(qi){   return 'ansNumbers_build_q_' + qi; }            // Sezione 2
-
-function injectSetupPanel(){
-  if(!SETUP_NUM) return;
-  const p = document.createElement('div');
-  p.id = 'setupNumPanel';
-  p.style.cssText = `
-    position:fixed; right:12px; bottom:12px; z-index:9999;
-    background:#ffffff; border:2px solid #2e7d32; border-radius:10px;
-    box-shadow:0 4px 10px rgba(0,0,0,.15); padding:10px; max-width:320px; font-family:Arial,sans-serif;
-  `;
-  p.innerHTML = `
-    <div style="font-weight:bold; margin-bottom:6px;">Setup numerazione</div>
-    <div style="font-size:12px; line-height:1.35">
-      Clicca sui punti (1,2,3,...) nell'ordine.<br/>
-      <span id="setupNumCtx" style="display:block; margin:6px 0; color:#1b5e20;"></span>
-      <button id="setupUndo">↩️ Annulla ultimo</button>
-      <button id="setupClear">🗑️ Svuota</button>
-      <button id="setupSave">💾 Salva</button>
-    </div>
-  `;
-  document.body.appendChild(p);
-}
-injectSetupPanel();
-
-let setupPoints = [];
-function setupUpdateBadge(ctxStr){
-  const el = document.getElementById('setupNumCtx');
-  if(el) el.textContent = ctxStr + ` — raccolti: ${setupPoints.length}`;
-}
-
-function bindSetupForSez1(file){
-  const cvs = document.getElementById('nums1');
-  if(!SETUP_NUM || !cvs) return;
-  const rectToXY = (e) => {
-    const r=cvs.getBoundingClientRect();
-    return {x: Math.round(e.clientX - r.left), y: Math.round(e.clientY - r.top)};
-  };
-  const onClick = (e) => {
-    const p = rectToXY(e);
-    setupPoints.push({x:p.x, y:p.y, text: String(setupPoints.length+1)});
-    setupUpdateBadge(`[Sez.1] ${file}`);
-  };
-  cvs.addEventListener('click', onClick);
-
-  try{
-    const raw = localStorage.getItem(keyAnsAnnota(file));
-    if(raw){ setupPoints = JSON.parse(raw) || []; }
-  }catch(_){}
-
-  const undo = document.getElementById('setupUndo');
-  const clear= document.getElementById('setupClear');
-  const save = document.getElementById('setupSave');
-  setupUpdateBadge(`[Sez.1] ${file}`);
-  undo.onclick = ()=>{ setupPoints.pop(); setupUpdateBadge(`[Sez.1] ${file}`); };
-  clear.onclick= ()=>{ setupPoints = []; setupUpdateBadge(`[Sez.1] ${file}`); };
-  save.onclick = ()=>{
-    localStorage.setItem(keyAnsAnnota(file), JSON.stringify(setupPoints));
-    alert(`Numerazione salvata per ${file} (${setupPoints.length} punti).`);
-  };
-}
-
-function bindSetupForSez2(qIndex){
-  const cvs = document.getElementById('costruCanvas');
-  if(!SETUP_NUM || !cvs) return;
-  const rectToXY = (e) => {
-    const r=cvs.getBoundingClientRect();
-    return {x: Math.round(e.clientX - r.left), y: Math.round(e.clientY - r.top)};
-  };
-  const onClick = (e) => {
-    const p = rectToXY(e);
-    setupPoints.push({x:p.x, y:p.y, text: String(setupPoints.length+1)});
-    setupUpdateBadge(`[Sez.2] Domanda ${qIndex+1}`);
-  };
-  cvs.addEventListener('click', onClick);
-
-  try{
-    const raw = localStorage.getItem(keyAnsBuildQ(qIndex));
-    if(raw){ setupPoints = JSON.parse(raw) || []; }
-  }catch(_){}
-
-  const undo = document.getElementById('setupUndo');
-  const clear= document.getElementById('setupClear');
-  const save = document.getElementById('setupSave');
-  setupUpdateBadge(`[Sez.2] Domanda ${qIndex+1}`);
-  undo.onclick = ()=>{ setupPoints.pop(); setupUpdateBadge(`[Sez.2] Domanda ${qIndex+1}`); };
-  clear.onclick= ()=>{ setupPoints = []; setupUpdateBadge(`[Sez.2] Domanda ${qIndex+1}`); };
-  save.onclick = ()=>{
-    localStorage.setItem(keyAnsBuildQ(qIndex), JSON.stringify(setupPoints));
-    alert(`Numerazione salvata per domanda ${qIndex+1} (${setupPoints.length} punti).`);
-  };
-}
 </script>
 
 <script>
@@ -441,8 +311,6 @@ const correctImagesAnnota={
 /* Pesi/chiavi globali per il riepilogo */
 window.W_TEXT = 1.0;
 window.W_VIS  = 1.0;
-
-/* Chiavi risposta di base (la numerazione viene idratata dal setup locale) */
 window.answerKeys = {
   "alcano.jpg":  { mask: correctImagesAnnota["alcano.jpg"],  numbers: [], tol: 16 },
   "alchene.jpg": { mask: correctImagesAnnota["alchene.jpg"], numbers: [], tol: 16 },
@@ -450,23 +318,6 @@ window.answerKeys = {
   "diene.jpg":   { mask: correctImagesAnnota["diene.jpg"],   numbers: [], tol: 16 },
   "benzene.jpg": { mask: correctImagesAnnota["benzene.jpg"], numbers: [], tol: 16 }
 };
-
-/* Idrata numerazione attesa da setup */
-function hydrateAnswerKeysFromLocal(){
-  if (!window.answerKeys) return;
-  for (const file of Object.keys(window.answerKeys)){
-    try{
-      const raw = localStorage.getItem('ansNumbers_annota_' + file);
-      if (raw){
-        const arr = JSON.parse(raw) || [];
-        if (Array.isArray(arr) && arr.length){
-          window.answerKeys[file].numbers = arr;
-        }
-      }
-    }catch(_){}
-  }
-}
-hydrateAnswerKeysFromLocal();
 
 let molIdx=0;
 const molIndicator=document.getElementById('molIndicator');
@@ -518,7 +369,6 @@ document.querySelectorAll('#palette .swatch').forEach(s=>{
 document.getElementById('clearBtn').addEventListener('click',()=>{
   sctx.clearRect(0,0,strokes1.width,strokes1.height);
   numbers=[]; renderNumbers(); saveAnnotaForKey(currentKey());
-  setUnsaved(true);
 });
 
 /* posizioni griglia per numeri */
@@ -539,7 +389,6 @@ function saveAnnotaForKey(keyOverride){
     text: (nomeInput.value || '')
   };
   localStorage.setItem(key, JSON.stringify(data));
-  setUnsaved(true);
 }
 function loadAnnotaForKey(key){
   try{
@@ -557,7 +406,7 @@ function applyLoadedState(state){
   draggingNum=null; drawing1=false; erasing1=false;
   sctx.clearRect(0,0,strokes1.width,strokes1.height);
   nctx.clearRect(0,0,nums1.width,nums1.height);
-  cctx.clearRect(0,0,cursor1.width,cursor1.height);
+  cctx.clearRect(0,0,cursor1.width,0);
   nomeInput.value = state.text || '';
   if(state.strokes){
     const si=new Image(); si.onload=()=>sctx.drawImage(si,0,0); si.src=state.strokes;
@@ -567,12 +416,12 @@ function applyLoadedState(state){
 }
 function saveCurrentMolecule(){ saveAnnotaForKey(currentKey()); }
 
-nomeInput.addEventListener('input',()=>{ saveAnnotaForKey(currentKey()); setUnsaved(true); });
+nomeInput.addEventListener('input',()=>{ saveAnnotaForKey(currentKey()); });
 document.querySelectorAll('#numsToolbar1 .numBtn').forEach(btn=>{
   btn.addEventListener('click',()=>{
     const p = nextGridPos(nums1.width, 30, 28, numbers.length);
     numbers.push({x:p.x,y:p.y,text:btn.textContent});
-    renderNumbers(); saveAnnotaForKey(currentKey()); setUnsaved(true);
+    renderNumbers(); saveAnnotaForKey(currentKey());
   });
 });
 
@@ -592,7 +441,6 @@ function loadMolecule(idx){
     bg.drawImage(img,0,0);
     const state = loadAnnotaForKey(currentKey());
     applyLoadedState(state);
-    if (SETUP_NUM) { bindSetupForSez1(file); }
   };
   img.onerror=()=>{
     resizeStage(600,400);
@@ -600,7 +448,6 @@ function loadMolecule(idx){
     bg.fillText('Immagine non trovata: '+file,20,30);
     const state = loadAnnotaForKey(currentKey());
     applyLoadedState(state);
-    if (SETUP_NUM) { bindSetupForSez1(file); }
   };
   img.src=file;
   molIndicator.textContent=`Molecola ${molIdx+1} di ${molFiles.length}`;
@@ -639,7 +486,7 @@ function eraseNumbersAt(x,y){
   const r=9;
   const before=numbers.length;
   numbers=numbers.filter(n=>Math.hypot(n.x-x,n.y-y)>r);
-  if(numbers.length!==before){ renderNumbers(); saveAnnotaForKey(currentKey()); setUnsaved(true); }
+  if(numbers.length!==before){ renderNumbers(); saveAnnotaForKey(currentKey()); }
 }
 function addDrawListeners(layer){
   layer.addEventListener('mousedown',e=>{
@@ -647,7 +494,6 @@ function addDrawListeners(layer){
     const p=posOn(layer,e);
     if(tool1==='pen'){drawing1=true; sctx.beginPath(); sctx.moveTo(p.x,p.y);}
     else if(tool1==='eraser'){erasing1=true; drawCursor1(p.x,p.y,true); eraseOnStrokes(p.x,p.y); eraseNumbersAt(p.x,p.y);}
-    setUnsaved(true);
   });
   layer.addEventListener('mousemove',e=>{
     if(mode1!=='draw') return;
@@ -668,7 +514,7 @@ function hitNum(x,y){for(let i=numbers.length-1;i>=0;i--){const n=numbers[i]; if
 nums1.addEventListener('mousedown',e=>{
   const p=posOn(nums1,e);
   const n=hitNum(p.x,p.y);
-  if(n){ disableToolsForNumbers(); draggingNum=n; setUnsaved(true); }
+  if(n){ disableToolsForNumbers(); draggingNum=n; }
 });
 nums1.addEventListener('mousemove',e=>{
   if(mode1!=='moveNums' || !draggingNum) return;
@@ -719,7 +565,6 @@ nums1.addEventListener('mousemove',e=>{
     if(domandaText) domandaText.textContent=questions[qIndex].testo;
     if(qIndicator) qIndicator.textContent=`Domanda ${qIndex+1} di ${questions.length}`;
     loadWorkForQuestion();
-    if (SETUP_NUM) { bindSetupForSez2(qIndex); }
   }
   function keyQ(i){ return 'build_q_'+i; }
 
@@ -886,19 +731,6 @@ nums1.addEventListener('mousemove',e=>{
     return pieces.filter(p => compIds.has(p.id));
   }
 
-  function wouldCollideGroup(gid,dx,dy,ignorePeerId,ignoreGroupId){
-    const members=groupMembers(gid);
-    for (const A of members){
-      const Ax=A.x+dx, Ay=A.y+dy, Aw=A.w, Ah=A.h;
-      for (const B of pieces){
-        if (B.groupId===gid) continue;
-        if (ignorePeerId && B.id===ignorePeerId) continue;
-        if (ignoreGroupId && B.groupId===ignoreGroupId) continue;
-        if (Ax < B.x + B.w && Ax + Aw > B.x && Ay < B.y + B.h && Ay + Ah > B.y) return true;
-      }
-    }
-    return false;
-  }
   function translateGroup(gid,dx,dy){ pieces.forEach(p=>{ if(p.groupId===gid){ p.x+=dx; p.y+=dy; }}); }
   function isComplement(a,b){ return (a==='male'&&b==='female')||(a==='female'&&b==='male'); }
 
@@ -922,8 +754,8 @@ nums1.addEventListener('mousemove',e=>{
     const bondish = isBond(a) || isBond(b);
     const rotated = (isBond(a) && (a.angle||0)%360 !== 0) || (isBond(b) && (b.angle||0)%360 !== 0);
     const boatish = (a.kind==='boat' || b.kind==='boat');
-    if (rotated) return Math.max(SOFT_SNAP_DIST, 10);
-    return (bondish || boatish) ? SOFT_SNAP_DIST : SNAP_DIST;
+    if (rotated) return Math.max(10, 10);
+    return (bondish || boatish) ? 10 : 2.2;
   }
 
   let snapEffects = [];
@@ -956,14 +788,11 @@ nums1.addEventListener('mousemove',e=>{
     }
   }
 
-  /* ===== SANITIZZAZIONE STRONG + RESET PORTE ===== */
   function cleanupOrphanEngagements() {
     for (const P of pieces) {
       for (const s of DIRS) {
         const c = P.connections?.[s] || null;
-        if (!c && P.engaged && P.engaged[s]) {
-          P.engaged[s] = false;
-        }
+        if (!c && P.engaged && P.engaged[s]) P.engaged[s] = false;
       }
     }
   }
@@ -999,13 +828,58 @@ nums1.addEventListener('mousemove',e=>{
     rebuildGroups();
   }
 
+  function trySnapGroup(gid){
+    const members = groupMembers(gid);
+    for (const A of members){
+      for (const B of pieces){
+        if (B.groupId === gid) continue;
+        const pairs = portPairs(A, B);
+        if (!pairs.length) continue;
+
+        for (const pr of pairs){
+          const Aports = getPorts(A);
+          const Bports = getPorts(B);
+          const aPt = Aports[pr.aKey];
+          const bPt = Bports[pr.bKey];
+          if (!aPt || !bPt) continue;
+
+          const R = effectiveSnapRadius(A, B);
+          const dx = bPt.x - aPt.x, dy = bPt.y - aPt.y;
+          const dist = Math.hypot(dx, dy);
+
+          if (dist <= R){
+            translateGroup(gid, dx, dy);
+
+            const Ai = findIndexById(A.id);
+            const Bi = findIndexById(B.id);
+            if (Ai < 0 || Bi < 0) continue;
+            const A2 = pieces[Ai];
+            const B2 = pieces[Bi];
+
+            A2.connections[pr.aKey] = { peerId: B2.id, peerSide: pr.bKey };
+            B2.connections[pr.bKey] = { peerId: A2.id, peerSide: pr.aKey };
+            A2.engaged[pr.aKey] = true;
+            B2.engaged[pr.bKey] = true;
+
+            addSnapEffect(bPt.x, bPt.y);
+            mergeGroups(A2.groupId, B2.groupId);
+            hardReenablePorts();
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+  window.trySnapGroup = trySnapGroup;
+
   function drawPiece(a){
     ctx.save();
     const angle = (isBond(a)?(a.angle||0):0);
     const cx=a.x+a.w/2, cy=a.y+a.h/2;
     ctx.translate(cx,cy); if(angle) ctx.rotate(angle*Math.PI/180); ctx.translate(-a.w/2,-a.h/2);
     if (a.kind!=='boat'){ ctx.fillStyle='#fff'; ctx.fillRect(0,0,a.w,a.h); }
-    ctx.fillStyle=ATOM_COLOR; ctx.strokeStyle=ATOM_COLOR; ctx.lineWidth=2; ctx.textBaseline='middle'; ctx.font='20px Arial';
+    ctx.fillStyle=ATOM_COLOR; ctx.strokeStyle=ATOM_COLOR; ctx.lineWidth=2; ctx.textBaseline='middle'; ctx.font=FONT;
     if (a.kind==='boat'){
       const vs=boatVertices({x:0,y:0,w:a.w,h:a.h});
       ctx.beginPath(); ctx.moveTo(vs[0].x,vs[0].y); for(let k=1;k<vs.length;k++) ctx.lineTo(vs[k].x,vs[k].y); ctx.closePath(); ctx.stroke();
@@ -1102,10 +976,12 @@ nums1.addEventListener('mousemove',e=>{
   }
 
   function tryEraseAt(x,y){
+    // numeri prima
     const beforeN = numbers2.length;
     numbers2 = numbers2.filter(n => Math.hypot(n.x-x,n.y-y) > 9);
-    if (numbers2.length !== beforeN){ draw(); saveWorkForQuestion(); setUnsaved(true); return; }
+    if (numbers2.length !== beforeN){ draw(); saveWorkForQuestion(); return; }
 
+    // poi pezzi
     for (let i=pieces.length-1;i>=0;i--){
       const p=pieces[i];
       if (pieceHitTest(p,x,y)){
@@ -1116,7 +992,6 @@ nums1.addEventListener('mousemove',e=>{
         hardReenablePorts();
         draw();
         saveWorkForQuestion();
-        setUnsaved(true);
         return;
       }
     }
@@ -1146,41 +1021,6 @@ nums1.addEventListener('mousemove',e=>{
     base.engaged = {}; base.connections = {};
     DIRS.forEach(d=>{ base.engaged[d]=false; base.connections[d]=null; });
     return base;
-  }
-
-  function loadWorkForQuestion(){
-    pieces = []; numbers2 = [];
-    selected=null; eraser=false; erasingHeld=false;
-    const ebtn=document.getElementById('eraser2'); if (ebtn) ebtn.classList.remove('danger');
-    const raw = localStorage.getItem(keyQ(qIndex));
-    if (raw){
-      try{
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)){
-          parsed.forEach(it => {
-            if (['—','=','≡','|'].includes(it.symbol)){
-              const map = {'—':'bond-','=':'bond=','≡':'bond≡','|':'bondV'}; const base = createBond(map[it.symbol]);
-              base.x = it.x || 40; base.y = it.y || 40; pieces.push(base);
-            } else {
-              const base = createStandard(it.symbol);
-              base.x = it.x || 40; base.y = it.y || 40; pieces.push(base);
-            }
-          });
-        } else if (parsed){
-          if (Array.isArray(parsed.pieces)){
-            pieces = parsed.pieces.map(p => revivePiece(p));
-            let maxId=0, maxG=0; pieces.forEach(p=>{ if(p.id>maxId) maxId=p.id; if(p.groupId>maxG) maxG=p.groupId; });
-            nextId=maxId+1; nextGroupId=maxG+1;
-          }
-          if (Array.isArray(parsed.numbers2)){
-            numbers2 = parsed.numbers2;
-          }
-        }
-      }catch(e){ /* ignore */ }
-    }
-    sanitizeGraph();
-    hardReenablePorts();
-    draw();
   }
 
   function sanitizeGraph(){
@@ -1235,7 +1075,7 @@ nums1.addEventListener('mousemove',e=>{
     if (kind==='boat') p=createBoat();
     else if (kind.startsWith('bond')) p=createBond(kind);
     else p=createStandard(kind);
-    pieces.push(p); selected=isBond(p)?p:null; draw(); saveWorkForQuestion(); setUnsaved(true);
+    pieces.push(p); selected=isBond(p)?p:null; draw(); saveWorkForQuestion();
   }
 
   document.querySelectorAll('#tools2 .add2').forEach(btn=> btn.addEventListener('click',()=> addByKind(btn.dataset.kind)) );
@@ -1246,7 +1086,7 @@ nums1.addEventListener('mousemove',e=>{
     cur.clearRect(0,0,costruCursor.width,costruCursor.height);
     sanitizeGraph();
     hardReenablePorts();
-    draw(); saveWorkForQuestion(); setUnsaved(true);
+    draw(); saveWorkForQuestion();
   });
 
   const eraserBtn2=document.getElementById('eraser2');
@@ -1261,7 +1101,7 @@ nums1.addEventListener('mousemove',e=>{
     if (selected && isBond(selected)){ 
       selected.angle=(selected.angle+15)%360; 
       hardReenablePorts();
-      draw(); saveWorkForQuestion(); setUnsaved(true);
+      draw(); saveWorkForQuestion(); 
     } 
   });
   document.getElementById('rotCCW2')?.addEventListener('click',()=>{ 
@@ -1269,7 +1109,7 @@ nums1.addEventListener('mousemove',e=>{
     if (selected && isBond(selected)){ 
       selected.angle=(selected.angle-15+360)%360; 
       hardReenablePorts();
-      draw(); saveWorkForQuestion(); setUnsaved(true);
+      draw(); saveWorkForQuestion(); 
     } 
   });
 
@@ -1304,8 +1144,7 @@ nums1.addEventListener('mousemove',e=>{
       A.x += dx; A.y += dy;
     }
 
-    trySnapGroup(A.groupId);
-    draw();
+    if (typeof trySnapGroup === 'function' && trySnapGroup(A.groupId)) { draw(); } else { draw(); }
   });
 
   costruCanvas.addEventListener('mousedown',e=>{
@@ -1318,9 +1157,9 @@ nums1.addEventListener('mousemove',e=>{
       return;
     }
     const n = hitNum2(x,y);
-    if (n){ dragNum2=n; setUnsaved(true); return; }
+    if (n){ dragNum2=n; return; }
     const idx=selectAt(x,y); if (idx===-1) return;
-    const p=pieces[idx]; drag={index:idx, ox:x-p.x, oy:y-p.y}; setUnsaved(true);
+    const p=pieces[idx]; drag={index:idx, ox:x-p.x, oy:y-p.y};
   });
   window.addEventListener('mouseup',()=>{
     if (eraser){
@@ -1331,7 +1170,7 @@ nums1.addEventListener('mousemove',e=>{
     if (drag){ 
       drag=null; 
       hardReenablePorts();
-      saveWorkForQuestion();
+      saveWorkForQuestion(); 
     }
     if (dragNum2){ dragNum2=null; saveWorkForQuestion(); }
   });
@@ -1371,7 +1210,7 @@ nums1.addEventListener('mousemove',e=>{
       A.x += dx; A.y += dy;
     }
 
-    trySnapGroup(A.groupId); draw();
+    if (typeof trySnapGroup === 'function' && trySnapGroup(A.groupId)) { draw(); } else { draw(); }
   },{passive:true});
   costruCanvas.addEventListener('touchstart',e=>{
     if(!e.touches.length) return; const {x,y}=toTouch(e.touches[0]);
@@ -1379,8 +1218,8 @@ nums1.addEventListener('mousemove',e=>{
       erasingHeld=true; cursorRing.x=x; cursorRing.y=y; draw(); tryEraseAt(x,y); return;
     }
     const n = hitNum2(x,y);
-    if (n){ dragNum2=n; setUnsaved(true); return; }
-    const idx=selectAt(x,y); if (idx===-1) return; const p=pieces[idx]; drag={index:idx, ox:x-p.x, oy:y-p.y}; setUnsaved(true);
+    if (n){ dragNum2=n; return; }
+    const idx=selectAt(x,y); if (idx===-1) return; const p=pieces[idx]; drag={index:idx, ox:x-p.x, oy:y-p.y};
   },{passive:true});
   costruCanvas.addEventListener('touchend',()=>{
     if (eraser){
@@ -1400,7 +1239,7 @@ nums1.addEventListener('mousemove',e=>{
     btn.addEventListener('click',()=>{
       const p = nextGridPos2(costruCanvas.width, 30, 28, numbers2.length);
       numbers2.push({x:p.x,y:p.y,text:btn.textContent});
-      draw(); saveWorkForQuestion(); setUnsaved(true);
+      draw(); saveWorkForQuestion();
     });
   });
 
@@ -1411,47 +1250,16 @@ nums1.addEventListener('mousemove',e=>{
   window.keyQ = keyQ;
 
   setQuestion(0);
-
-  /* ===== Snap & connessione ===== */
-  function trySnapGroup(gid){
-    const mem = groupMembers(gid);
-    for (const A of mem){
-      for (const B of pieces){
-        if (A.id===B.id) continue;
-        const pairs = portPairs(A,B);
-        for (const pr of pairs){
-          const R = effectiveSnapRadius(A,B);
-          const d = Math.hypot(pr.aPt.x - pr.bPt.x, pr.aPt.y - pr.bPt.y);
-          if (d <= R){
-            // collega
-            A.connections[pr.aKey] = {peerId:B.id, peerSide:pr.bKey};
-            B.connections[pr.bKey] = {peerId:A.id, peerSide:pr.aKey};
-            A.engaged[pr.aKey] = true; B.engaged[pr.bKey]=true;
-            mergeGroups(A.groupId, B.groupId);
-            addSnapEffect((pr.aPt.x+pr.bPt.x)/2, (pr.aPt.y+pr.bPt.y)/2);
-            return;
-          }
-        }
-      }
-    }
-  }
-
-  /* ===== Esposizione globale minima per riepilogo ===== */
-  window.__build_getPayload = (idx)=>{
-    const raw = localStorage.getItem('build_q_'+idx);
-    try{ return raw ? JSON.parse(raw) : null; }catch(_){ return null; }
-  };
 })();
 </script>
 
 <script>
-/* ===== Sezione 1: metriche aggiornate (recall + numeri) ===== */
+/* ===== Utility immagine per valutazione Sezione 1 (solo tratti + numeri) ===== */
 function luma601(r,g,b){ return 0.299*r + 0.587*g + 0.114*b; }
 
 function loadImageData(src, w, h){
   return new Promise(res=>{
     const img=new Image();
-    img.crossOrigin="anonymous";
     img.onload=()=>{
       const cw=w||img.width, ch=h||img.height;
       const c=document.createElement('canvas'); c.width=cw; c.height=ch;
@@ -1487,7 +1295,8 @@ function maskFromNonWhite(img, whiteTol=250){
   }
   return {mask:out,width,height};
 }
-function dilate(mask, w, h, radius=3) {
+// dilatazione più generosa (r=2, 2 passi)
+function dilate(mask, w, h, radius=2) {
   const out = new Uint8Array(mask.length);
   for (let y=0; y<h; y++) {
     for (let x=0; x<w; x++) {
@@ -1495,77 +1304,57 @@ function dilate(mask, w, h, radius=3) {
       if (mask[i]) { out[i]=1; continue; }
       let hit = 0;
       for (let dy=-radius; dy<=radius && !hit; dy++) {
-        const yy=y+dy; if(yy<0||yy>=h) continue;
+        const yy = y + dy; if (yy<0 || yy>=h) continue;
         for (let dx=-radius; dx<=radius; dx++) {
-          const xx=x+dx; if(xx<0||xx>=w) continue;
-          if (dx*dx+dy*dy>radius*radius) continue;
-          const j=yy*w+xx; if(mask[j]){ hit=1; break; }
+          const xx = x + dx; if (xx<0 || xx>=w) continue;
+          if (dx*dx + dy*dy > radius*radius) continue;
+          const j = yy*w + xx; if (mask[j]) { hit = 1; break; }
         }
       }
-      out[i]=hit;
+      out[i] = hit;
     }
   }
   return out;
 }
-function dilateN(mask, w, h, radius=3, steps=2){
-  let cur=mask;
-  for(let s=0;s<steps;s++) cur=dilate(cur,w,h,radius);
+function dilateN(mask, w, h, radius=2, steps=2){
+  let cur = mask;
+  for (let s=0; s<steps; s++) cur = dilate(cur, w, h, radius);
   return cur;
 }
-function recallTeacherCovered(studentMask, teacherMask){
-  let inter=0, doc=0;
-  for(let i=0;i<teacherMask.length;i++){
-    if(teacherMask[i]){ doc++; if(studentMask[i]) inter++; }
-  }
-  if (doc===0) return 1;
-  return inter/doc;
+function diceScore(A,B){
+  let tp=0,a=0,b=0;
+  for(let i=0;i<A.length;i++){ const va=A[i], vb=B[i]; if(va) a++; if(vb) b++; if(va&&vb) tp++; }
+  if(a+b===0) return 1;
+  return (2*tp)/(a+b);
 }
-async function scoreStrokesRecall(studentDataUrl, teacherPngUrl){
+async function scoreStrokesOverlap(studentDataUrl, teacherPngUrl){
   const stud = await dataUrlToImageData(studentDataUrl);
   if(!stud) return 0;
   const teach = await loadImageData(teacherPngUrl, stud.width, stud.height);
   if(!teach) return 0;
-
-  const Sm = maskFromAlpha(stud);
-  const Tm = maskFromNonWhite(teach, 250);
-
-  const Sg = dilateN(Sm.mask, Sm.width, Sm.height, 3, 2);
-  const Tg = dilateN(Tm.mask, Tm.width, Tm.height, 2, 2);
-
-  const r = recallTeacherCovered(Sg, Tg);
-  if (r >= 0.90) return 1.0;
-  if (r >= 0.80) return 0.9 + (r-0.80)*(0.1/0.10);
-  return r;
+  const A = maskFromAlpha(stud);
+  const B = maskFromNonWhite(teach, 250);
+  const Ad = dilateN(A.mask, A.width, A.height, 2, 2);
+  const Bd = dilateN(B.mask, B.width, B.height, 2, 2);
+  return diceScore(Ad, Bd);
 }
 function scoreNumbersSequence(expectedArr, studentNums, tol=16){
-  if(!expectedArr || !expectedArr.length) return null;
-
-  const sameLen = studentNums && (studentNums.length === expectedArr.length);
-  let exactOrder = !!sameLen;
-  if (sameLen){
-    for(let i=0;i<expectedArr.length;i++){
-      if(String(studentNums[i].text) !== String(expectedArr[i].text)){ exactOrder=false; break; }
+  if(!expectedArr || !expectedArr.length) return 0;
+  const matchedIdx=[]; let hit=0;
+  expectedArr.forEach((exp, idx)=>{
+    const cand = (studentNums||[]).filter(n => String(n.text)===String(exp.text));
+    let ok=false;
+    for(const n of cand){
+      const d=Math.hypot(n.x-exp.x, n.y-exp.y);
+      if(d<=tol){ ok=true; break; }
     }
-  }
-  let posOK = !!sameLen;
-  if (sameLen){
-    for(let i=0;i<expectedArr.length;i++){
-      const e = expectedArr[i], s = studentNums[i];
-      const d = Math.hypot((s.x||0)-(e.x||0), (s.y||0)-(e.y||0));
-      if (d > tol){ posOK=false; break; }
-    }
-  }
-  if (sameLen && exactOrder && posOK) return 1.0;
-
-  let hit=0;
-  const L = Math.min(expectedArr.length, (studentNums||[]).length);
-  for(let i=0;i<L;i++){
-    if(String(studentNums[i].text)===String(expectedArr[i].text)){
-      const d = Math.hypot((studentNums[i].x||0)-(expectedArr[i].x||0),(studentNums[i].y||0)-(expectedArr[i].y||0));
-      if(d<=tol) hit++;
-    }
-  }
-  return hit/expectedArr.length;
+    if(ok){ hit++; matchedIdx.push(idx); }
+  });
+  const posScore = hit/expectedArr.length;
+  let inv=0; for(let i=0;i<matchedIdx.length;i++){ for(let j=i+1;j<matchedIdx.length;j++){ if(matchedIdx[i]>matchedIdx[j]) inv++; } }
+  const maxInv = matchedIdx.length*(matchedIdx.length-1)/2;
+  const ordScore = maxInv? (1 - inv/maxInv) : 1;
+  return 0.5*posScore + 0.5*ordScore;
 }
 </script>
 
@@ -1607,7 +1396,10 @@ function renderBuildSnapshot(payload, width=800, height=500){
     ctx.fillStyle='#fff'; ctx.fillRect(0,0,width,height);
     const FONT='20px Arial';
     ctx.font=FONT; ctx.textBaseline='middle';
-    const labelOf = (kind)=>( kind==='bond-'?'—': kind==='bond='?'=': kind==='bond≡'?'≡': kind==='bondV'?'|': kind==='CH2'?'CH₂': kind==='CH3'?'CH₃': kind );
+    const labelOf = (kind)=>(
+      kind==='bond-'?'—': kind==='bond='?'=': kind==='bond≡'?'≡': kind==='bondV'?'|':
+      kind==='CH2'?'CH₂': kind==='CH3'?'CH₃': kind
+    );
     function boatVertices(a){
       const x=a.x, y=a.y;
       const v1={x:x+40,  y:y+135}, v2={x:x+140, y:y+60}, v3={x:x+260, y:y+95},
@@ -1642,7 +1434,9 @@ function renderBuildSnapshot(payload, width=800, height=500){
 </script>
 
 <script>
-/* ===== Sezione 2: scoring rigido + numerazione 20% ===== */
+/* ===== Valutazione & Riepilogo + consegna ===== */
+function editDistance(a,b){const dp=Array.from({length:b.length+1},(_,j)=>j);for(let i=1;i<=a.length;i++){let prev=i-1;dp[0]=i;for(let j=1;j<=b.length;j++){const tmp=dp[j];const cost=a[i-1]===b[j-1]?0:1;dp[j]=Math.min(dp[j]+1,dp[j-1]+1,prev+cost);prev=tmp;}}return dp[b.length];}
+function simFine(a,b){a=(a||'').toLowerCase().trim();b=(b||'').toLowerCase().trim();const L=Math.max(a.length,b.length);if(L===0)return 1;const ed=editDistance(a,b);const s=(L-ed)/L;if(s>=0.90)return 1.0;if(s>=0.75)return 0.75;if(s>=0.50)return 0.50;if(s>=0.25)return 0.25;return 0.0;}
 function countAtoms(listOrObj){
   let list = [];
   if (Array.isArray(listOrObj)){
@@ -1676,97 +1470,44 @@ function countAtoms(listOrObj){
   });
   return cnt;
 }
-function scoreBuildVariant(exp, got){
+
+// NUOVA: niente 0.25 per vuoti, soglia minima struttura
+function scoreBuild(exp, got) {
   const atomKeys = ['C','H','Cl','Br','F','I'];
   const bondKeys = ['—','=','≡'];
+  const parts = [];
+
+  atomKeys.forEach(k => {
+    const e = exp[k] || 0;
+    const g = got[k] || 0;
+    if (e>0 || g>0) {
+      if (e===0 && g>0) parts.push(0);
+      else parts.push(Math.min(g, e) / Math.max(e, 1));
+    }
+  });
+  bondKeys.forEach(sym => {
+    const expB = (exp.bonds || '').split('').filter(s => s === sym).length;
+    const gotB = (got.bonds || {})[sym] || 0;
+    if (expB>0 || gotB>0) {
+      if (expB===0 && gotB>0) parts.push(0);
+      else parts.push(Math.min(gotB, expB) / Math.max(expB, 1));
+    }
+  });
 
   const totalAtoms = atomKeys.reduce((a,k)=>a+(got[k]||0),0);
   const totalBonds = bondKeys.reduce((a,k)=>a+((got.bonds||{})[k]||0),0);
-  const hasStructure = (totalAtoms >= 3) && (totalBonds >= 1);
-  if (!hasStructure) return 0;
+  const hasStructure = (totalAtoms + totalBonds) >= 3; // soglia minima
 
-  const comps = [];
-  atomKeys.forEach(k=>{
-    const e = exp[k] || 0;
-    const g = got[k] || 0;
-    if (e===0 && g===0) return;
-    const r = (e===0 || g===0) ? 0 : Math.min(e,g)/Math.max(e,g);
-    comps.push(Math.max(0, Math.min(1, r)));
-  });
+  if (!hasStructure) return 0.0;
+  if (parts.length === 0) return 0.0;
 
-  const needDbl = (exp.bonds||'').includes('=');
-  const needTrp = (exp.bonds||'').includes('≡');
-
-  ['—','=', '≡'].forEach(sym=>{
-    const e = (exp.bonds||'').split('').filter(s=>s===sym).length;
-    const g = (got.bonds||{})[sym] || 0;
-    if (e===0 && g===0) return;
-    const r = (e===0 || g===0) ? 0 : Math.min(e,g)/Math.max(e,g);
-    comps.push(Math.max(0, Math.min(1, r)));
-  });
-
-  if (!comps.length) return 0;
-
-  if (needDbl && ((got.bonds||{})['=']||0)===0) return 0.15;
-  if (needTrp && ((got.bonds||{})['≡']||0)===0) return 0.15;
-
-  const logSum = comps.reduce((a,c)=> a + Math.log(Math.max(c, 1e-6)), 0);
-  const gm = Math.exp(logSum / comps.length);
-
-  if (gm >= 0.95) return 1.0;
-  if (gm >= 0.80) return 0.75;
-  if (gm >= 0.60) return 0.50;
-  if (gm >= 0.40) return 0.25;
+  const avg = parts.reduce((a,c)=>a+c,0) / parts.length;
+  if (avg >= 0.90) return 1.0;
+  if (avg >= 0.75) return 0.75;
+  if (avg >= 0.50) return 0.50;
+  if (avg >= 0.25) return 0.25;
   return 0.0;
 }
-function scoreBuild(expOrArray, got){
-  const variants = Array.isArray(expOrArray) ? expOrArray : [expOrArray];
-  let best = 0;
-  for (const v of variants){ best = Math.max(best, scoreBuildVariant(v, got)); }
-  return best;
-}
-
-/* ===== Sezione 2: numerazione attesa da setup ===== */
-window.buildAnswerNumbers = {};
-(function hydrateBuildNumbers(){
-  // se modifichi il numero di domande, sostituisci 3 con questions.length
-  for (let i=0;i<3;i++){
-    try{
-      const raw = localStorage.getItem('ansNumbers_build_q_' + i);
-      if (raw){
-        const arr = JSON.parse(raw) || [];
-        if (Array.isArray(arr) && arr.length) window.buildAnswerNumbers[i] = arr;
-      }
-    }catch(_){}
-  }
-})();
-</script>
-
-<script>
-/* ===== Consegna + Riepilogo + PIN + Reset post-consegna ===== */
-function editDistance(a,b){const dp=Array.from({length:b.length+1},(_,j)=>j);for(let i=1;i<=a.length;i++){let prev=i-1;dp[0]=i;for(let j=1;j<=b.length;j++){const tmp=dp[j];const cost=a[i-1]===b[j-1]?0:1;dp[j]=Math.min(dp[j]+1,dp[j-1]+1,prev+cost);prev=tmp;}}return dp[b.length];}
-function simFine(a,b){a=(a||'').toLowerCase().trim();b=(b||'').toLowerCase().trim();const L=Math.max(a.length,b.length);if(L===0)return 1;const ed=editDistance(a,b);const s=(L-ed)/L;if(s>=0.90)return 1.0;if(s>=0.75)return 0.75;if(s>=0.50)return 0.50;if(s>=0.25)return 0.25;return 0.0;}
-
-document.getElementById('printBtn').addEventListener('click', ()=>{
-  if (!window.__PIN_UNLOCKED__) { alert('Inserisci il PIN per abilitare la stampa.'); return; }
-  window.print();
-});
-
-// PIN overlay handlers
-const pinOverlay = document.getElementById('pinOverlay');
-const pinInput = document.getElementById('pinInput');
-document.getElementById('pinCancel').addEventListener('click', ()=>{ pinOverlay.style.display='none'; });
-document.getElementById('pinOk').addEventListener('click', ()=>{
-  const val = (pinInput.value||'').trim();
-  if (val === PIN_CODE){
-    window.__PIN_UNLOCKED__ = true;
-    pinOverlay.style.display='none';
-    document.getElementById('printBtn').disabled = false;
-    setUnsaved(true); // finché si rimane nel riepilogo, avvisa sull’uscita
-  } else {
-    alert('PIN errato.');
-  }
-});
 
 document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
   const sicuro = confirm('Sei sicuro di voler consegnare la verifica?\nPremi "OK" per consegnare o "Annulla" per tornare indietro.');
@@ -1783,6 +1524,7 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
     const classe = (document.getElementById('classe').value||'').trim();
     const dataStr = (document.getElementById('data').value||'');
 
+    // intestazione
     const anag = document.getElementById('anagrafica');
     anag.innerHTML = `
       <div><strong>Studente:</strong> ${esc(nome)} ${esc(cognome)} — <strong>Classe:</strong> ${esc(classe)}</div>
@@ -1802,17 +1544,12 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
         const corr = correctNames[file] || '';
         const sText = userTxt ? simFine(userTxt, corr) : 0;
 
-        let sStrokes=0, sNums=null, sVis=0;
+        let sStrokes=0, sNums=0, sVis=0;
         const key = (window.answerKeys||{})[file];
         if (key && key.mask){
-          sStrokes = await scoreStrokesRecall(saved.strokes||'', key.mask);
+          sStrokes = await scoreStrokesOverlap(saved.strokes||'', key.mask);
           sNums    = scoreNumbersSequence(key.numbers||[], saved.numbers||[], key.tol||16);
-          if (Array.isArray(key.numbers) && key.numbers.length){
-            sVis = 0.8*sStrokes + 0.2*(sNums ?? 0);
-            if (sStrokes>=0.9 && (sNums ?? 0)>=0.9) sVis = 1.0;
-          } else {
-            sVis = sStrokes;
-          }
+          sVis     = (key.numbers && key.numbers.length) ? (0.5*sStrokes + 0.5*sNums) : sStrokes;
         }
 
         const pts = +((sText*(window.W_TEXT||1) + sVis*(window.W_VIS||1))).toFixed(2);
@@ -1851,7 +1588,9 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
 
         card.appendChild(txt); card.appendChild(imgs);
         cont1.appendChild(card);
-      }catch(err){ console.warn('[Sez1]', file, err); }
+      }catch(err){
+        console.warn('[Sez1]', file, err);
+      }
     }
 
     /* ===== Sezione 2 ===== */
@@ -1873,18 +1612,8 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
         try{ payload = raw ? JSON.parse(raw) : null; }catch(_){ payload=null; }
 
         const got = countAtoms(payload || []);
-        const sStruct = scoreBuild(q.expected, got);
-
-        let sNum = 0;
-        try {
-          const expectedNums = (window.buildAnswerNumbers||{})[idx] || null;
-          if (expectedNums && expectedNums.length){
-            sNum = scoreNumbersSequence(expectedNums, (payload && payload.numbers2) ? payload.numbers2 : [], 16) || 0;
-          }
-        } catch(_) { sNum = 0; }
-
-        const s = Math.min(1, 0.8*sStruct + 0.2*sNum);
-        const pts = +s.toFixed(2);
+        const s = scoreBuild(q.expected, got);
+        const pts = +(s*1).toFixed(2);
         puntiSec2 += pts;
 
         let studPNG = '';
@@ -1907,7 +1636,9 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
 
         card.appendChild(txt); card.appendChild(imgs);
         cont2.appendChild(card);
-      }catch(err){ console.warn('[Sez2] domanda', idx+1, err); }
+      }catch(err){
+        console.warn('[Sez2] domanda', idx+1, err);
+      }
     }
 
     const tot = puntiSec1 + puntiSec2; // max 13
@@ -1921,22 +1652,22 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
       </div>
     `;
 
-    // Mostra riepilogo, blocca dietro PIN
     document.getElementById('resultSection').style.display='block';
-    document.getElementById('printBtn').disabled = true;
-    window.__PIN_UNLOCKED__ = false;
-    pinInput.value='';
-    pinOverlay.style.display='flex';
+    enableLeaveWarning(true); // avviso anche nel riepilogo
 
-    // Dopo aver generato il riepilogo, resetta TUTTO il lavoro studente
-    clearStudentWork();
-
-    // Ora la pagina è un riepilogo bloccato da PIN: avvisa se si tenta di uscire
-    setUnsaved(true);
+    // Reset risposte SALVATE, ma lascia visibile il riepilogo già generato:
+    resetAllProgress({keepResult:true});
 
   } catch (err){
     console.error('[Consegna] errore:', err);
     alert('Si è verificato un errore durante la generazione del riepilogo. Controlla la console per i dettagli.');
+  }
+});
+
+// Torna alla schermata iniziale dal riepilogo (e reset totale)
+document.getElementById('backHomeBtn').addEventListener('click', ()=>{
+  if (confirm('Tornare alla schermata iniziale cancellerà tutte le risposte salvate. Procedere?')) {
+    resetAllProgress({keepResult:false});
   }
 });
 </script>
