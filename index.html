@@ -25,10 +25,7 @@
   .swatch{ width:28px; height:28px; border-radius:50%; border:2px solid #fff; outline:1px solid #333; cursor:pointer; }
   .swatch.sel{ box-shadow:0 0 0 2px #fff, 0 0 0 4px var(--accent) inset; }
 
-  .numBtn{
-    background:var(--verde); color:#fff; width:30px; height:30px;
-    border-radius:50%; font-weight:bold;
-  }
+  .numBtn{ background:var(--verde); color:#fff; width:30px; height:30px; border-radius:50%; font-weight:bold; }
 
   .stage{ position:relative; border:2px solid var(--bordo); background:#fff; border-radius:10px; overflow:hidden; box-shadow:0 2px 6px var(--ombra);}
   #stage1{ display:block; margin:0 auto; }
@@ -209,7 +206,10 @@
   <h4>Sezione 1 – Annotazione</h4><div id="riepilogoAnnota"></div>
   <h4>Sezione 2 – Costruzione</h4><div id="riepilogoCostru"></div>
   <h4>Totale</h4><div id="totali"></div>
-  <div class="space-between"><span></span><button onclick="window.print()">📄 Esporta PDF</button></div>
+  <div class="space-between">
+    <button id="backHomeBtn">⬅️ Torna alla schermata iniziale</button>
+    <button onclick="window.print()">📄 Esporta PDF</button>
+  </div>
 </div>
 
 <script>
@@ -225,6 +225,45 @@ if(dataEl) dataEl.value = today.toLocaleDateString('it-IT',{year:'numeric',month
 let startTime=null,endTime=null,timerInt=null;
 const studentInfoBar=document.getElementById('studentInfoBar');
 const fmtTime=d=>d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
+
+/* ===== Avviso uscita & reset ===== */
+let warnOnUnload = false;
+function enableLeaveWarning(on){ warnOnUnload = !!on; }
+window.addEventListener('beforeunload', (e) => {
+  if (!warnOnUnload) return;
+  e.preventDefault();
+  e.returnValue = '';
+});
+function resetAllProgress(opts={}){
+  const keepResult = !!opts.keepResult;
+  // rimuovi risposte salvate
+  const toDelete = [];
+  for (let i=0;i<localStorage.length;i++){
+    const k = localStorage.key(i);
+    if (!k) continue;
+    if (k.startsWith('annota_') || k.startsWith('build_q_')) toDelete.push(k);
+  }
+  toDelete.forEach(k=>localStorage.removeItem(k));
+
+  // azzera UI
+  if (!keepResult){
+    try{
+      document.getElementById('resultSection').style.display='none';
+      document.getElementById('sezione1').style.display='none';
+      document.getElementById('sezione2').style.display='none';
+      document.getElementById('studentSection').style.display='block';
+      document.getElementById('studentInfoBar').style.display='none';
+    }catch(_){}
+    // campi anagrafica
+    ['nome','cognome','classe','data'].forEach(id=>{
+      const el=document.getElementById(id); if(el) el.value='';
+    });
+  }
+  // stop timer
+  try{ if(timerInt){ clearInterval(timerInt); timerInt=null; } }catch(_){}
+  // warning
+  enableLeaveWarning(false);
+}
 
 /* ===== Avvio verifica ===== */
 document.getElementById('iniziaBtn').addEventListener('click', ()=>{
@@ -243,6 +282,8 @@ document.getElementById('iniziaBtn').addEventListener('click', ()=>{
   document.getElementById('studentSection').style.display='none';
   document.getElementById('sezione1').style.display='block';
   document.getElementById('sezione2').style.display='block';
+
+  enableLeaveWarning(true); // << avviso “lascia pagina” attivo durante la verifica
 
   loadMolecule(0);
   window.setQuestion && window.setQuestion(0);
@@ -365,7 +406,7 @@ function applyLoadedState(state){
   draggingNum=null; drawing1=false; erasing1=false;
   sctx.clearRect(0,0,strokes1.width,strokes1.height);
   nctx.clearRect(0,0,nums1.width,nums1.height);
-  cctx.clearRect(0,0,cursor1.width,cursor1.height);
+  cctx.clearRect(0,0,cursor1.width,0);
   nomeInput.value = state.text || '';
   if(state.strokes){
     const si=new Image(); si.onload=()=>sctx.drawImage(si,0,0); si.src=state.strokes;
@@ -690,19 +731,6 @@ nums1.addEventListener('mousemove',e=>{
     return pieces.filter(p => compIds.has(p.id));
   }
 
-  function wouldCollideGroup(gid,dx,dy,ignorePeerId,ignoreGroupId){
-    const members=groupMembers(gid);
-    for (const A of members){
-      const Ax=A.x+dx, Ay=A.y+dy, Aw=A.w, Ah=A.h;
-      for (const B of pieces){
-        if (B.groupId===gid) continue;
-        if (ignorePeerId && B.id===ignorePeerId) continue;
-        if (ignoreGroupId && B.groupId===ignoreGroupId) continue;
-        if (Ax < B.x + B.w && Ax + Aw > B.x && Ay < B.y + B.h && Ay + Ah > B.y) return true;
-      }
-    }
-    return false;
-  }
   function translateGroup(gid,dx,dy){ pieces.forEach(p=>{ if(p.groupId===gid){ p.x+=dx; p.y+=dy; }}); }
   function isComplement(a,b){ return (a==='male'&&b==='female')||(a==='female'&&b==='male'); }
 
@@ -726,8 +754,8 @@ nums1.addEventListener('mousemove',e=>{
     const bondish = isBond(a) || isBond(b);
     const rotated = (isBond(a) && (a.angle||0)%360 !== 0) || (isBond(b) && (b.angle||0)%360 !== 0);
     const boatish = (a.kind==='boat' || b.kind==='boat');
-    if (rotated) return Math.max(SOFT_SNAP_DIST, 10);
-    return (bondish || boatish) ? SOFT_SNAP_DIST : SNAP_DIST;
+    if (rotated) return Math.max(10, 10);
+    return (bondish || boatish) ? 10 : 2.2;
   }
 
   let snapEffects = [];
@@ -760,53 +788,11 @@ nums1.addEventListener('mousemove',e=>{
     }
   }
 
-  /* ===== SANITIZZAZIONE STRONG + RESET PORTE ===== */
-  function sanitizeGraph(){
-    const ids = new Set(pieces.map(p=>p.id));
-    const typeOf = (P, side)=> (P?.connectors?.[side] || 'none');
-    const isCompl = (a,b)=> (a==='male'&&b==='female')||(a==='female'&&b==='male');
-
-    for (const P of pieces){
-      for (const s of DIRS){
-        const c = P.connections?.[s];
-        if (!c){ P.connections[s]=null; P.engaged[s]=false; continue; }
-        if (!ids.has(c.peerId)){
-          P.connections[s] = null;
-          P.engaged[s] = false;
-        }
-      }
-    }
-    for (const P of pieces){
-      for (const s of DIRS){
-        const c = P.connections?.[s];
-        if (!c) continue;
-        const j = pieces.findIndex(Q => Q.id === c.peerId);
-        if (j < 0){ P.connections[s]=null; P.engaged[s]=false; continue; }
-        const Q = pieces[j];
-        const back = Q.connections?.[c.peerSide];
-        const tA = typeOf(P, s);
-        const tB = typeOf(Q, c.peerSide);
-        if (!back || back.peerId !== P.id || !isCompl(tA, tB)){
-          P.connections[s] = null; P.engaged[s] = false;
-          if (Q.connections && Q.engaged){
-            Q.connections[c.peerSide] = null; Q.engaged[c.peerSide] = false;
-          }
-        } else {
-          P.engaged[s] = true; Q.engaged[c.peerSide] = true;
-        }
-      }
-    }
-    rebuildGroups();
-  }
-
-  // --- START: porta-fix forti ---
   function cleanupOrphanEngagements() {
     for (const P of pieces) {
       for (const s of DIRS) {
         const c = P.connections?.[s] || null;
-        if (!c && P.engaged && P.engaged[s]) {
-          P.engaged[s] = false;
-        }
+        if (!c && P.engaged && P.engaged[s]) P.engaged[s] = false;
       }
     }
   }
@@ -841,9 +827,7 @@ nums1.addEventListener('mousemove',e=>{
     normalizeConnectionsSymmetric();
     rebuildGroups();
   }
-  // --- END: porta-fix forti ---
 
-  /* ===== SNAP DI GRUPPO: AGGANCIO PORTE + MERGE GRUPPI ===== */
   function trySnapGroup(gid){
     const members = groupMembers(gid);
     for (const A of members){
@@ -887,7 +871,7 @@ nums1.addEventListener('mousemove',e=>{
     }
     return false;
   }
-  window.trySnapGroup = trySnapGroup; // utile per debug
+  window.trySnapGroup = trySnapGroup;
 
   function drawPiece(a){
     ctx.save();
@@ -978,7 +962,6 @@ nums1.addEventListener('mousemove',e=>{
   function unlinkPieceById(id){
     const i=pieces.findIndex(p=>p.id===id); if(i<0) return;
     const A=pieces[i];
-    // sgancio pulito su entrambi i lati prima della rimozione
     for (const s of DIRS){
       const c=A.connections?.[s];
       A.engaged[s]=false; A.connections[s]=null;
@@ -1006,7 +989,7 @@ nums1.addEventListener('mousemove',e=>{
         unlinkPieceById(p.id);
         pieces.splice(i,1);
         sanitizeGraph();
-        hardReenablePorts();   // fix porte
+        hardReenablePorts();
         draw();
         saveWorkForQuestion();
         return;
@@ -1019,7 +1002,6 @@ nums1.addEventListener('mousemove',e=>{
     localStorage.setItem(keyQ(qIndex), JSON.stringify(payload));
   }
 
-  /* ====== Revive connettori coerenti al tipo ====== */
   function connectorsFor(kind){
     const none = {N:'none',S:'none',E:'none',W:'none',A1:'none',A2:'none',A3:'none',A4:'none',A5:'none',A6:'none',EQ1:'none',EQ2:'none',EQ3:'none',EQ4:'none',EQ5:'none',EQ6:'none'};
     const clone = (o)=>JSON.parse(JSON.stringify(o));
@@ -1041,42 +1023,42 @@ nums1.addEventListener('mousemove',e=>{
     return base;
   }
 
-  function loadWorkForQuestion(){
-    pieces = []; numbers2 = [];
-    selected=null; eraser=false; erasingHeld=false;
-    const ebtn=document.getElementById('eraser2'); if (ebtn) ebtn.classList.remove('danger');
-    const raw = localStorage.getItem(keyQ(qIndex));
-    if (raw){
-      try{
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)){
-          parsed.forEach(it => {
-            if (['—','=','≡','|'].includes(it.symbol)){
-              const map = {'—':'bond-','=':'bond=','≡':'bond≡','|':'bondV'};
-              const base = createBond(map[it.symbol]);
-              base.x = it.x || 40; base.y = it.y || 40;
-              pieces.push(base);
-            } else {
-              const base = createStandard(it.symbol);
-              base.x = it.x || 40; base.y = it.y || 40;
-              pieces.push(base);
-            }
-          });
-        } else if (parsed){
-          if (Array.isArray(parsed.pieces)){
-            pieces = parsed.pieces.map(p => revivePiece(p));
-            let maxId=0, maxG=0; pieces.forEach(p=>{ if(p.id>maxId) maxId=p.id; if(p.groupId>maxG) maxG=p.groupId; });
-            nextId=maxId+1; nextGroupId=maxG+1;
-          }
-          if (Array.isArray(parsed.numbers2)){
-            numbers2 = parsed.numbers2;
-          }
+  function sanitizeGraph(){
+    const ids = new Set(pieces.map(p=>p.id));
+    const typeOf = (P, side)=> (P?.connectors?.[side] || 'none');
+    const isCompl = (a,b)=> (a==='male'&&b==='female')||(a==='female'&&b==='male');
+
+    for (const P of pieces){
+      for (const s of DIRS){
+        const c = P.connections?.[s];
+        if (!c){ P.connections[s]=null; P.engaged[s]=false; continue; }
+        if (!ids.has(c.peerId)){
+          P.connections[s] = null;
+          P.engaged[s] = false;
         }
-      }catch(e){ /* ignore */ }
+      }
     }
-    sanitizeGraph();
-    hardReenablePorts();   // fix porte
-    draw();
+    for (const P of pieces){
+      for (const s of DIRS){
+        const c = P.connections?.[s];
+        if (!c) continue;
+        const j = pieces.findIndex(Q => Q.id === c.peerId);
+        if (j < 0){ P.connections[s]=null; P.engaged[s]=false; continue; }
+        const Q = pieces[j];
+        const back = Q.connections?.[c.peerSide];
+        const tA = typeOf(P, s);
+        const tB = typeOf(Q, c.peerSide);
+        if (!back || back.peerId !== P.id || !isCompl(tA, tB)){
+          P.connections[s] = null; P.engaged[s] = false;
+          if (Q.connections && Q.engaged){
+            Q.connections[c.peerSide] = null; Q.engaged[c.peerSide] = false;
+          }
+        } else {
+          P.engaged[s] = true; Q.engaged[c.peerSide] = true;
+        }
+      }
+    }
+    rebuildGroups();
   }
 
   function bringToFront(i){ const p = pieces.splice(i,1)[0]; pieces.push(p); return pieces.length-1; }
@@ -1103,7 +1085,7 @@ nums1.addEventListener('mousemove',e=>{
     pieces=[]; numbers2=[]; selected=null; eraser=false; erasingHeld=false;
     cur.clearRect(0,0,costruCursor.width,costruCursor.height);
     sanitizeGraph();
-    hardReenablePorts();   // fix porte
+    hardReenablePorts();
     draw(); saveWorkForQuestion();
   });
 
@@ -1118,7 +1100,7 @@ nums1.addEventListener('mousemove',e=>{
     eraser=false; eraserBtn2.classList.remove('danger'); 
     if (selected && isBond(selected)){ 
       selected.angle=(selected.angle+15)%360; 
-      hardReenablePorts();  // fix porte dopo rotazione
+      hardReenablePorts();
       draw(); saveWorkForQuestion(); 
     } 
   });
@@ -1126,7 +1108,7 @@ nums1.addEventListener('mousemove',e=>{
     eraser=false; eraserBtn2.classList.remove('danger'); 
     if (selected && isBond(selected)){ 
       selected.angle=(selected.angle-15+360)%360; 
-      hardReenablePorts();  // fix porte dopo rotazione
+      hardReenablePorts();
       draw(); saveWorkForQuestion(); 
     } 
   });
@@ -1162,12 +1144,7 @@ nums1.addEventListener('mousemove',e=>{
       A.x += dx; A.y += dy;
     }
 
-    // GUARD contro assenza funzione e redraw solo se snap effettivo
-    if (typeof trySnapGroup === 'function' && trySnapGroup(A.groupId)) {
-      draw();
-    } else {
-      draw();
-    }
+    if (typeof trySnapGroup === 'function' && trySnapGroup(A.groupId)) { draw(); } else { draw(); }
   });
 
   costruCanvas.addEventListener('mousedown',e=>{
@@ -1192,7 +1169,7 @@ nums1.addEventListener('mousemove',e=>{
     }
     if (drag){ 
       drag=null; 
-      hardReenablePorts(); // fix porte a fine drag
+      hardReenablePorts();
       saveWorkForQuestion(); 
     }
     if (dragNum2){ dragNum2=null; saveWorkForQuestion(); }
@@ -1233,12 +1210,7 @@ nums1.addEventListener('mousemove',e=>{
       A.x += dx; A.y += dy;
     }
 
-    // GUARD su mobile
-    if (typeof trySnapGroup === 'function' && trySnapGroup(A.groupId)) {
-      draw();
-    } else {
-      draw();
-    }
+    if (typeof trySnapGroup === 'function' && trySnapGroup(A.groupId)) { draw(); } else { draw(); }
   },{passive:true});
   costruCanvas.addEventListener('touchstart',e=>{
     if(!e.touches.length) return; const {x,y}=toTouch(e.touches[0]);
@@ -1257,7 +1229,7 @@ nums1.addEventListener('mousemove',e=>{
     }
     if (drag){ 
       drag=null; 
-      hardReenablePorts(); // fix porte a fine drag
+      hardReenablePorts();
       saveWorkForQuestion(); 
     }
     if (dragNum2){ dragNum2=null; saveWorkForQuestion(); }
@@ -1283,7 +1255,6 @@ nums1.addEventListener('mousemove',e=>{
 
 <script>
 /* ===== Utility immagine per valutazione Sezione 1 (solo tratti + numeri) ===== */
-// luminanza per "quasi bianco"
 function luma601(r,g,b){ return 0.299*r + 0.587*g + 0.114*b; }
 
 function loadImageData(src, w, h){
@@ -1316,7 +1287,7 @@ function maskFromAlpha(img, thr=16){
   for(let i=0,px=0;i<data.length;i+=4,px++){ out[px] = (data[i+3]>=thr)?1:0; }
   return {mask:out,width,height};
 }
-function maskFromNonWhite(img, whiteTol=245){
+function maskFromNonWhite(img, whiteTol=250){
   const {data,width,height}=img; const out=new Uint8Array(width*height);
   for(let i=0,px=0;i<data.length;i+=4,px++){
     const a=data[i+3]; if(a===0){ out[px]=0; continue; }
@@ -1324,25 +1295,31 @@ function maskFromNonWhite(img, whiteTol=245){
   }
   return {mask:out,width,height};
 }
-// dilatazione 1px per tolleranza percorso
-function dilate1(mask,w,h){
-  const out=new Uint8Array(mask.length);
-  const N=[-w-1,-w,-w+1, -1,0,1, w-1,w,w+1];
-  for(let y=0;y<h;y++){
-    for(let x=0;x<w;x++){
-      const i=y*w+x;
-      if(mask[i]){ out[i]=1; continue; }
-      for(const off of N){
-        const j=i+off;
-        if(j<0||j>=mask.length) continue;
-        const dx=Math.abs((j%w)-(i%w));
-        const dy=Math.abs(((j/w)|0)-((i/w)|0));
-        if(dx>1||dy>1) continue;
-        if(mask[j]){ out[i]=1; break; }
+// dilatazione più generosa (r=2, 2 passi)
+function dilate(mask, w, h, radius=2) {
+  const out = new Uint8Array(mask.length);
+  for (let y=0; y<h; y++) {
+    for (let x=0; x<w; x++) {
+      const i = y*w + x;
+      if (mask[i]) { out[i]=1; continue; }
+      let hit = 0;
+      for (let dy=-radius; dy<=radius && !hit; dy++) {
+        const yy = y + dy; if (yy<0 || yy>=h) continue;
+        for (let dx=-radius; dx<=radius; dx++) {
+          const xx = x + dx; if (xx<0 || xx>=w) continue;
+          if (dx*dx + dy*dy > radius*radius) continue;
+          const j = yy*w + xx; if (mask[j]) { hit = 1; break; }
+        }
       }
+      out[i] = hit;
     }
   }
   return out;
+}
+function dilateN(mask, w, h, radius=2, steps=2){
+  let cur = mask;
+  for (let s=0; s<steps; s++) cur = dilate(cur, w, h, radius);
+  return cur;
 }
 function diceScore(A,B){
   let tp=0,a=0,b=0;
@@ -1350,19 +1327,17 @@ function diceScore(A,B){
   if(a+b===0) return 1;
   return (2*tp)/(a+b);
 }
-// Overlap tratti tollerante
 async function scoreStrokesOverlap(studentDataUrl, teacherPngUrl){
   const stud = await dataUrlToImageData(studentDataUrl);
   if(!stud) return 0;
   const teach = await loadImageData(teacherPngUrl, stud.width, stud.height);
   if(!teach) return 0;
   const A = maskFromAlpha(stud);
-  const B = maskFromNonWhite(teach, 245);
-  const Ad = dilate1(A.mask, A.width, A.height);
-  const Bd = dilate1(B.mask, B.width, B.height);
+  const B = maskFromNonWhite(teach, 250);
+  const Ad = dilateN(A.mask, A.width, A.height, 2, 2);
+  const Bd = dilateN(B.mask, B.width, B.height, 2, 2);
   return diceScore(Ad, Bd);
 }
-// Numeri: posizione + ordine
 function scoreNumbersSequence(expectedArr, studentNums, tol=16){
   if(!expectedArr || !expectedArr.length) return 0;
   const matchedIdx=[]; let hit=0;
@@ -1495,7 +1470,44 @@ function countAtoms(listOrObj){
   });
   return cnt;
 }
-function scoreBuild(exp,got){const keys=['C','H','Cl','Br','F','I'];let parts=[];keys.forEach(k=>{const e=exp[k]||0,g=got[k]||0;if(e===0&&g===0)parts.push(1);else if(e===0&&g>0)parts.push(0);else parts.push(Math.min(g,e)/Math.max(e,1));});['—','=','≡'].forEach(sym=>{const expB=(exp.bonds||'').split('').filter(s=>s===sym).length;const gotB=(got.bonds||{})[sym]||0;if(expB===0&&gotB===0)parts.push(1);else if(expB===0&&gotB>0)parts.push(0);else parts.push(Math.min(gotB,expB)/Math.max(expB,1));});const avg=parts.reduce((a,c)=>a+c,0)/parts.length;if(avg>=0.90)return 1.0;if(avg>=0.75)return 0.75;if(avg>=0.50)return 0.50;if(avg>=0.25)return 0.25;return 0.0;}
+
+// NUOVA: niente 0.25 per vuoti, soglia minima struttura
+function scoreBuild(exp, got) {
+  const atomKeys = ['C','H','Cl','Br','F','I'];
+  const bondKeys = ['—','=','≡'];
+  const parts = [];
+
+  atomKeys.forEach(k => {
+    const e = exp[k] || 0;
+    const g = got[k] || 0;
+    if (e>0 || g>0) {
+      if (e===0 && g>0) parts.push(0);
+      else parts.push(Math.min(g, e) / Math.max(e, 1));
+    }
+  });
+  bondKeys.forEach(sym => {
+    const expB = (exp.bonds || '').split('').filter(s => s === sym).length;
+    const gotB = (got.bonds || {})[sym] || 0;
+    if (expB>0 || gotB>0) {
+      if (expB===0 && gotB>0) parts.push(0);
+      else parts.push(Math.min(gotB, expB) / Math.max(expB, 1));
+    }
+  });
+
+  const totalAtoms = atomKeys.reduce((a,k)=>a+(got[k]||0),0);
+  const totalBonds = bondKeys.reduce((a,k)=>a+((got.bonds||{})[k]||0),0);
+  const hasStructure = (totalAtoms + totalBonds) >= 3; // soglia minima
+
+  if (!hasStructure) return 0.0;
+  if (parts.length === 0) return 0.0;
+
+  const avg = parts.reduce((a,c)=>a+c,0) / parts.length;
+  if (avg >= 0.90) return 1.0;
+  if (avg >= 0.75) return 0.75;
+  if (avg >= 0.50) return 0.50;
+  if (avg >= 0.25) return 0.25;
+  return 0.0;
+}
 
 document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
   const sicuro = confirm('Sei sicuro di voler consegnare la verifica?\nPremi "OK" per consegnare o "Annulla" per tornare indietro.');
@@ -1641,9 +1653,21 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
     `;
 
     document.getElementById('resultSection').style.display='block';
+    enableLeaveWarning(true); // avviso anche nel riepilogo
+
+    // Reset risposte SALVATE, ma lascia visibile il riepilogo già generato:
+    resetAllProgress({keepResult:true});
+
   } catch (err){
     console.error('[Consegna] errore:', err);
     alert('Si è verificato un errore durante la generazione del riepilogo. Controlla la console per i dettagli.');
+  }
+});
+
+// Torna alla schermata iniziale dal riepilogo (e reset totale)
+document.getElementById('backHomeBtn').addEventListener('click', ()=>{
+  if (confirm('Tornare alla schermata iniziale cancellerà tutte le risposte salvate. Procedere?')) {
+    resetAllProgress({keepResult:false});
   }
 });
 </script>
