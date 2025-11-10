@@ -24,7 +24,6 @@
   .indicator{ font-weight:bold; }
   .swatch{ width:28px; height:28px; border-radius:50%; border:2px solid #fff; outline:1px solid #333; cursor:pointer; }
   .swatch.sel{ box-shadow:0 0 0 2px #fff, 0 0 0 4px var(--accent) inset; }
-
   .numBtn{ background:var(--verde); color:#fff; width:30px; height:30px; border-radius:50%; font-weight:bold; }
 
   .stage{ position:relative; border:2px solid var(--bordo); background:#fff; border-radius:10px; overflow:hidden; box-shadow:0 2px 6px var(--ombra);}
@@ -62,20 +61,33 @@
   #studentSection input{ min-width:160px; }
   input.small-note{display:block; margin:10px auto 0;}
 
-  /* Caselle testo riepilogo */
+  /* Riepilogo */
   .ansFieldWrap{ margin-top:6px; display:flex; flex-direction:column; gap:4px; }
   .ansLabel{ font-size:12px; color:#1b5e20; }
-  .ansInput{
-    width: min(420px, 95%);
-    padding:6px 8px;
-    border:1px solid #a5d6a7;
-    border-radius:6px;
-    background:#f8fff8;
-    color:#0b3d0b;
+  .ansInput{ width:min(420px,95%); padding:6px 8px; border:1px solid #a5d6a7; border-radius:6px; background:#f8fff8; color:#0b3d0b; }
+
+  /* Lock overlay */
+  #lockOverlay{
+    position:relative;
+    margin:12px auto 0;
+    border:2px dashed #b71c1c;
+    border-radius:10px;
+    background:rgba(255,235,238,.8);
+    padding:12px;
+    display:none;
   }
+  #lockOverlay .row{justify-content:center}
+  #lockedMask{
+    display:none;
+    position:absolute; inset:0;
+    background:rgba(255,255,255,0.7);
+    backdrop-filter: blur(1px);
+    border-radius:8px;
+  }
+  #lockOverlay.active #lockedMask{ display:block; }
 
   @media print{
-    #studentSection, #sezione1, #sezione2, #studentInfoBar { display:none !important; }
+    #studentSection, #sezione1, #sezione2, #studentInfoBar, #lockOverlay { display:none !important; }
     body{ background:#fff; }
     .section{ border:none; box-shadow:none; }
   }
@@ -200,15 +212,28 @@
 </div>
 
 <!-- RIEPILOGO -->
-<div class="section" id="resultSection" style="display:none;">
+<div class="section" id="resultSection" style="display:none; position:relative;">
   <h3>Riepilogo verifica</h3>
+
+  <!-- BLOCCO: Codice di sblocco -->
+  <div id="lockOverlay" class="">
+    <div id="lockedMask"></div>
+    <div class="row" style="gap:8px; flex-wrap:wrap; justify-content:center;">
+      <span style="font-weight:bold; color:#b71c1c;">Riepilogo bloccato.</span>
+      <span>Inserisci il codice di sblocco per visualizzare o esportare: </span>
+      <input id="unlockCode" placeholder="Codice" style="width:90px; text-align:center;">
+      <button id="unlockBtn">Sblocca</button>
+      <span id="unlockMsg" style="color:#b71c1c;"></span>
+    </div>
+  </div>
+
   <div id="anagrafica"></div><hr/>
   <h4>Sezione 1 – Annotazione</h4><div id="riepilogoAnnota"></div>
   <h4>Sezione 2 – Costruzione</h4><div id="riepilogoCostru"></div>
   <h4>Totale</h4><div id="totali"></div>
   <div class="space-between">
     <button id="backHomeBtn">⬅️ Torna alla schermata iniziale</button>
-    <button onclick="window.print()">📄 Esporta PDF</button>
+    <button id="printBtn">📄 Esporta PDF</button>
   </div>
 </div>
 
@@ -236,6 +261,7 @@ window.addEventListener('beforeunload', (e) => {
 });
 function resetAllProgress(opts={}){
   const keepResult = !!opts.keepResult;
+
   // rimuovi risposte salvate
   const toDelete = [];
   for (let i=0;i<localStorage.length;i++){
@@ -245,7 +271,7 @@ function resetAllProgress(opts={}){
   }
   toDelete.forEach(k=>localStorage.removeItem(k));
 
-  // azzera UI
+  // azzera UI (se torniamo alla home)
   if (!keepResult){
     try{
       document.getElementById('resultSection').style.display='none';
@@ -254,17 +280,17 @@ function resetAllProgress(opts={}){
       document.getElementById('studentSection').style.display='block';
       document.getElementById('studentInfoBar').style.display='none';
     }catch(_){}
-    // campi anagrafica
     ['nome','cognome','classe','data'].forEach(id=>{
       const el=document.getElementById(id); if(el) el.value='';
     });
+    // disattiva warning solo se torniamo alla home
+    enableLeaveWarning(false);
   }
-  // stop timer
   try{ if(timerInt){ clearInterval(timerInt); timerInt=null; } }catch(_){}
-  // warning
-  enableLeaveWarning(false);
 }
+</script>
 
+<script>
 /* ===== Avvio verifica ===== */
 document.getElementById('iniziaBtn').addEventListener('click', ()=>{
   const nome=document.getElementById('nome').value.trim();
@@ -283,7 +309,7 @@ document.getElementById('iniziaBtn').addEventListener('click', ()=>{
   document.getElementById('sezione1').style.display='block';
   document.getElementById('sezione2').style.display='block';
 
-  enableLeaveWarning(true); // << avviso “lascia pagina” attivo durante la verifica
+  enableLeaveWarning(true); // avviso durante la verifica
 
   loadMolecule(0);
   window.setQuestion && window.setQuestion(0);
@@ -309,8 +335,8 @@ const correctImagesAnnota={
 };
 
 /* Pesi/chiavi globali per il riepilogo */
-window.W_TEXT = 1.0;
-window.W_VIS  = 1.0;
+window.W_TEXT = 1.0;  // punteggio "testo" (simFine ⊕ NLP features)
+window.W_VIS  = 1.0;  // punteggio "visivo" (overlap ⊕ numeri)
 window.answerKeys = {
   "alcano.jpg":  { mask: correctImagesAnnota["alcano.jpg"],  numbers: [], tol: 16 },
   "alchene.jpg": { mask: correctImagesAnnota["alchene.jpg"], numbers: [], tol: 16 },
@@ -656,7 +682,7 @@ nums1.addEventListener('mousemove',e=>{
   }
 
   function boatVertices(a){
-    const x=a.x, y=a.y, w=a.w, h=a.h;
+    const x=a.x, y=a.y;
     const v1={x:x+40,  y:y+135};
     const v2={x:x+140, y:y+60};
     const v3={x:x+260, y:y+95};
@@ -731,6 +757,62 @@ nums1.addEventListener('mousemove',e=>{
     return pieces.filter(p => compIds.has(p.id));
   }
 
+  function cleanupOrphanEngagements() {
+    for (const P of pieces) {
+      for (const s of DIRS) {
+        const c = P.connections?.[s] || null;
+        if (!c && P.engaged && P.engaged[s]) P.engaged[s] = false;
+      }
+    }
+  }
+  function normalizeConnectionsSymmetric() {
+    const id2idx = new Map(pieces.map((p,i)=>[p.id,i]));
+    const typeOf = (P, side)=> (P?.connectors?.[side] || 'none');
+    const isCompl = (a,b)=> (a==='male'&&b==='female')||(a==='female'&&b==='male');
+    for (const P of pieces){
+      for (const s of DIRS){
+        const c = P.connections?.[s];
+        if (!c){ P.engaged[s]=false; continue; }
+        const j = id2idx.get(c.peerId);
+        if (j===undefined) { P.connections[s]=null; P.engaged[s]=false; continue; }
+        const Q = pieces[j];
+        const back = Q.connections?.[c.peerSide];
+        const tA = typeOf(P,s), tB = typeOf(Q,c.peerSide);
+        if (!back || back.peerId !== P.id || !isCompl(tA,tB)){
+          P.connections[s]=null; P.engaged[s]=false;
+          if (Q.connections && Q.engaged){
+            Q.connections[c.peerSide]=null; Q.engaged[c.peerSide]=false;
+          }
+        } else {
+          P.engaged[s]=true; Q.engaged[c.peerSide]=true;
+        }
+      }
+    }
+  }
+  function hardReenablePorts(){
+    cleanupOrphanEngagements();
+    normalizeConnectionsSymmetric();
+    rebuildGroups();
+  }
+  function rebuildGroups(){
+    const n=pieces.length, visited=new Array(n).fill(false);
+    for (let i=0;i<n;i++){
+      if (visited[i]) continue;
+      const q=[i]; visited[i]=true; const members=[i];
+      while(q.length){
+        const u=q.shift(); const U=pieces[u];
+        for (const k of DIRS){
+          const c=U.connections[k]; if(!c) continue;
+          const v=pieces.findIndex(pp=>pp.id===c.peerId);
+          if (v<0 || visited[v]) continue;
+          visited[v]=true; q.push(v); members.push(v);
+        }
+      }
+      const newId = ++nextGroupId;
+      members.forEach(idx=> pieces[idx].groupId = newId);
+    }
+  }
+
   function translateGroup(gid,dx,dy){ pieces.forEach(p=>{ if(p.groupId===gid){ p.x+=dx; p.y+=dy; }}); }
   function isComplement(a,b){ return (a==='male'&&b==='female')||(a==='female'&&b==='male'); }
 
@@ -768,68 +850,8 @@ nums1.addEventListener('mousemove',e=>{
     if (stillFx || stillRing){ requestAnimationFrame(tick); } else { animating=false; }
   }
 
-  function mergeGroups(gKeep,gMove){ if(gKeep===gMove) return; pieces.forEach(p=>{ if(p.groupId===gMove) p.groupId=gKeep; }); }
-  function rebuildGroups(){
-    const n=pieces.length, visited=new Array(n).fill(false);
-    for (let i=0;i<n;i++){
-      if (visited[i]) continue;
-      const q=[i]; visited[i]=true; const members=[i];
-      while(q.length){
-        const u=q.shift(); const U=pieces[u];
-        for (const k of DIRS){
-          const c=U.connections[k]; if(!c) continue;
-          const v=pieces.findIndex(pp=>pp.id===c.peerId);
-          if (v<0 || visited[v]) continue;
-          visited[v]=true; q.push(v); members.push(v);
-        }
-      }
-      const newId = ++nextGroupId;
-      members.forEach(idx=> pieces[idx].groupId = newId);
-    }
-  }
-
-  function cleanupOrphanEngagements() {
-    for (const P of pieces) {
-      for (const s of DIRS) {
-        const c = P.connections?.[s] || null;
-        if (!c && P.engaged && P.engaged[s]) P.engaged[s] = false;
-      }
-    }
-  }
-  function normalizeConnectionsSymmetric() {
-    const id2idx = new Map(pieces.map((p,i)=>[p.id,i]));
-    const typeOf = (P, side)=> (P?.connectors?.[side] || 'none');
-    const isCompl = (a,b)=> (a==='male'&&b==='female')||(a==='female'&&b==='male');
-
-    for (const P of pieces){
-      for (const s of DIRS){
-        const c = P.connections?.[s];
-        if (!c){ P.engaged[s]=false; continue; }
-        const j = id2idx.get(c.peerId);
-        if (j===undefined) { P.connections[s]=null; P.engaged[s]=false; continue; }
-        const Q = pieces[j];
-        const back = Q.connections?.[c.peerSide];
-        const tA = typeOf(P,s), tB = typeOf(Q,c.peerSide);
-
-        if (!back || back.peerId !== P.id || !isCompl(tA,tB)){
-          P.connections[s]=null; P.engaged[s]=false;
-          if (Q.connections && Q.engaged){
-            Q.connections[c.peerSide]=null; Q.engaged[c.peerSide]=false;
-          }
-        } else {
-          P.engaged[s]=true; Q.engaged[c.peerSide]=true;
-        }
-      }
-    }
-  }
-  function hardReenablePorts(){
-    cleanupOrphanEngagements();
-    normalizeConnectionsSymmetric();
-    rebuildGroups();
-  }
-
   function trySnapGroup(gid){
-    const members = groupMembers(gid);
+    const members = pieces.filter(p=>p.groupId===gid);
     for (const A of members){
       for (const B of pieces){
         if (B.groupId === gid) continue;
@@ -850,8 +872,8 @@ nums1.addEventListener('mousemove',e=>{
           if (dist <= R){
             translateGroup(gid, dx, dy);
 
-            const Ai = findIndexById(A.id);
-            const Bi = findIndexById(B.id);
+            const Ai = pieces.findIndex(p=>p.id===A.id);
+            const Bi = pieces.findIndex(p=>p.id===B.id);
             if (Ai < 0 || Bi < 0) continue;
             const A2 = pieces[Ai];
             const B2 = pieces[Bi];
@@ -862,7 +884,9 @@ nums1.addEventListener('mousemove',e=>{
             B2.engaged[pr.bKey] = true;
 
             addSnapEffect(bPt.x, bPt.y);
-            mergeGroups(A2.groupId, B2.groupId);
+            // merge gruppi
+            const gKeep = A2.groupId, gMove = B2.groupId;
+            pieces.forEach(p=>{ if(p.groupId===gMove) p.groupId=gKeep; });
             hardReenablePorts();
             return true;
           }
@@ -879,41 +903,40 @@ nums1.addEventListener('mousemove',e=>{
     const cx=a.x+a.w/2, cy=a.y+a.h/2;
     ctx.translate(cx,cy); if(angle) ctx.rotate(angle*Math.PI/180); ctx.translate(-a.w/2,-a.h/2);
     if (a.kind!=='boat'){ ctx.fillStyle='#fff'; ctx.fillRect(0,0,a.w,a.h); }
-    ctx.fillStyle=ATOM_COLOR; ctx.strokeStyle=ATOM_COLOR; ctx.lineWidth=2; ctx.textBaseline='middle'; ctx.font=FONT;
+    ctx.fillStyle='#000'; ctx.strokeStyle='#000'; ctx.lineWidth=2; ctx.textBaseline='middle'; ctx.font=FONT;
     if (a.kind==='boat'){
-      const vs=boatVertices({x:0,y:0,w:a.w,h:a.h});
-      ctx.beginPath(); ctx.moveTo(vs[0].x,vs[0].y); for(let k=1;k<vs.length;k++) ctx.lineTo(vs[k].x,vs[k].y); ctx.closePath(); ctx.stroke();
+      const vs=(function(a){const x=a.x,y=a.y;return[{x:x+40,y:y+135},{x:x+140,y:y+60},{x:x+260,y:y+95},{x:x+395,y:y+180},{x:x+300,y:y+235},{x:x+170,y:y+205}];})(a);
+      ctx.beginPath(); ctx.moveTo(vs[0].x-a.x,vs[0].y-a.y);
+      for(let k=1;k<vs.length;k++) ctx.lineTo(vs[k].x-a.x,vs[k].y-a.y);
+      ctx.closePath(); ctx.stroke();
     }else{
       const lab=labelOf(a.kind); const tw=ctx.measureText(lab).width;
       ctx.fillText(lab,(a.w-tw)/2,a.h/2);
     }
     ctx.restore();
-    if (showPorts) drawPorts(a);
-  }
-  function drawPorts(a){
-    const ports=getPorts(a);
-    for (const side in ports){
-      const t=a.connectors?.[side]||'none'; if (t==='none') continue;
-      const pt=ports[side]; const engaged=!!a.engaged[side];
-      ctx.save(); ctx.lineWidth=2;
-      if (t==='female'){
-        ctx.beginPath(); ctx.arc(pt.x,pt.y,4,0,Math.PI*2);
-        engaged ? (ctx.fillStyle='rgba(56,142,60,.8)', ctx.fill()) : (ctx.strokeStyle='rgba(56,142,60,.9)', ctx.stroke());
-      }else{
-        const r=4;
-        engaged ? (ctx.fillStyle='rgba(56,142,60,.8)', ctx.fillRect(pt.x-r,pt.y-r,r*2,r*2))
-                : (ctx.strokeStyle='rgba(56,142,60,.9)', ctx.strokeRect(pt.x-r,pt.y-r,r*2,r*2));
+    if (showPorts) {
+      const ports=getPorts(a);
+      for (const side in ports){
+        const t=a.connectors?.[side]||'none'; if (t==='none') continue;
+        const pt=ports[side]; const engaged=!!a.engaged[side];
+        ctx.save(); ctx.lineWidth=2;
+        if (t==='female'){
+          ctx.beginPath(); ctx.arc(pt.x,pt.y,4,0,Math.PI*2);
+          engaged ? (ctx.fillStyle='rgba(56,142,60,.8)', ctx.fill()) : (ctx.strokeStyle='rgba(56,142,60,.9)', ctx.stroke());
+        }else{
+          const r=4;
+          engaged ? (ctx.fillStyle='rgba(56,142,60,.8)', ctx.fillRect(pt.x-r,pt.y-r,r*2,r*2))
+                  : (ctx.strokeStyle='rgba(56,142,60,.9)', ctx.strokeRect(pt.x-r,pt.y-r,r*2,r*2));
+        }
+        ctx.restore();
       }
-      ctx.restore();
     }
   }
 
   function draw(ts){
     ctx.clearRect(0,0,costruCanvas.width,costruCanvas.height);
     pieces.forEach(p=>drawPiece(p));
-
-    ctx.fillStyle='#2e7d32';
-    ctx.font='bold 16px Arial';
+    ctx.fillStyle='#2e7d32'; ctx.font='bold 16px Arial';
     numbers2.forEach(n => { ctx.fillText(n.text, n.x-4, n.y+6); });
 
     if (snapEffects.length){
@@ -939,14 +962,12 @@ nums1.addEventListener('mousemove',e=>{
     if (a.kind!=='boat'){
       return (x>=a.x && x<=a.x+a.w && y>=a.y && y<=a.y+a.h);
     }
-    const vs=boatVertices(a);
-    ctx.save();
-    ctx.beginPath(); ctx.moveTo(vs[0].x,vs[0].y);
+    const vs=[{x:a.x+40,y:a.y+135},{x:a.x+140,y:a.y+60},{x:a.x+260,y:a.y+95},{x:a.x+395,y:a.y+180},{x:a.x+300,y:a.y+235},{x:a.x+170,y:a.y+205}];
+    ctx.save(); ctx.beginPath(); ctx.moveTo(vs[0].x,vs[0].y);
     for(let i=1;i<vs.length;i++) ctx.lineTo(vs[i].x,vs[i].y);
     ctx.closePath();
     const inside = ctx.isPointInPath(x,y) || ctx.isPointInStroke(x,y);
-    ctx.restore();
-    return inside;
+    ctx.restore(); return inside;
   }
 
   function nextGridPos2(canvasWidth, margin=30, step=28, count=0){
@@ -966,7 +987,7 @@ nums1.addEventListener('mousemove',e=>{
       const c=A.connections?.[s];
       A.engaged[s]=false; A.connections[s]=null;
       if(c){
-        const j=findIndexById(c.peerId);
+        const j=pieces.findIndex(p=>p.id===c.peerId);
         if(j>=0){
           const B=pieces[j];
           if (B.connections && B.engaged){ B.connections[c.peerSide]=null; B.engaged[c.peerSide]=false; }
@@ -976,12 +997,10 @@ nums1.addEventListener('mousemove',e=>{
   }
 
   function tryEraseAt(x,y){
-    // numeri prima
     const beforeN = numbers2.length;
     numbers2 = numbers2.filter(n => Math.hypot(n.x-x,n.y-y) > 9);
     if (numbers2.length !== beforeN){ draw(); saveWorkForQuestion(); return; }
 
-    // poi pezzi
     for (let i=pieces.length-1;i>=0;i--){
       const p=pieces[i];
       if (pieceHitTest(p,x,y)){
@@ -997,17 +1016,12 @@ nums1.addEventListener('mousemove',e=>{
     }
   }
 
-  function saveWorkForQuestion(){
-    const payload = { pieces, numbers2 };
-    localStorage.setItem(keyQ(qIndex), JSON.stringify(payload));
-  }
+  function saveWorkForQuestion(){ localStorage.setItem(keyQ(qIndex), JSON.stringify({ pieces, numbers2 })); }
 
   function connectorsFor(kind){
     const none = {N:'none',S:'none',E:'none',W:'none',A1:'none',A2:'none',A3:'none',A4:'none',A5:'none',A6:'none',EQ1:'none',EQ2:'none',EQ3:'none',EQ4:'none',EQ5:'none',EQ6:'none'};
     const clone = (o)=>JSON.parse(JSON.stringify(o));
-    if (kind==='boat'){
-      const c=clone(none); ['A1','A2','A3','A4','A5','A6','EQ1','EQ2','EQ3','EQ4','EQ5','EQ6'].forEach(k=>c[k]='female'); return c;
-    }
+    if (kind==='boat'){ const c=clone(none); ['A1','A2','A3','A4','A5','A6','EQ1','EQ2','EQ3','EQ4','EQ5','EQ6'].forEach(k=>c[k]='female'); return c; }
     if (kind==='bondV'){ const c=clone(none); c.N='male'; c.S='male'; return c; }
     if (kind==='bond-'||kind==='bond='||kind==='bond≡'){ const c=clone(none); c.E='male'; c.W='male'; return c; }
     const c=clone(none); c.N=c.S=c.E=c.W='female'; return c;
@@ -1022,7 +1036,6 @@ nums1.addEventListener('mousemove',e=>{
     DIRS.forEach(d=>{ base.engaged[d]=false; base.connections[d]=null; });
     return base;
   }
-
   function sanitizeGraph(){
     const ids = new Set(pieces.map(p=>p.id));
     const typeOf = (P, side)=> (P?.connectors?.[side] || 'none');
@@ -1032,10 +1045,7 @@ nums1.addEventListener('mousemove',e=>{
       for (const s of DIRS){
         const c = P.connections?.[s];
         if (!c){ P.connections[s]=null; P.engaged[s]=false; continue; }
-        if (!ids.has(c.peerId)){
-          P.connections[s] = null;
-          P.engaged[s] = false;
-        }
+        if (!ids.has(c.peerId)){ P.connections[s] = null; P.engaged[s] = false; }
       }
     }
     for (const P of pieces){
@@ -1071,8 +1081,7 @@ nums1.addEventListener('mousemove',e=>{
   function addByKind(kind){
     eraser=false; erasingHeld=false; cur.clearRect(0,0,costruCursor.width,costruCursor.height);
     const ebtn=document.getElementById('eraser2'); if (ebtn) ebtn.classList.remove('danger');
-    let p;
-    if (kind==='boat') p=createBoat();
+    let p; if (kind==='boat') p=createBoat();
     else if (kind.startsWith('bond')) p=createBond(kind);
     else p=createStandard(kind);
     pieces.push(p); selected=isBond(p)?p:null; draw(); saveWorkForQuestion();
@@ -1084,8 +1093,7 @@ nums1.addEventListener('mousemove',e=>{
   document.getElementById('clear2')?.addEventListener('click',()=>{
     pieces=[]; numbers2=[]; selected=null; eraser=false; erasingHeld=false;
     cur.clearRect(0,0,costruCursor.width,costruCursor.height);
-    sanitizeGraph();
-    hardReenablePorts();
+    sanitizeGraph(); hardReenablePorts();
     draw(); saveWorkForQuestion();
   });
 
@@ -1098,140 +1106,65 @@ nums1.addEventListener('mousemove',e=>{
   });
   document.getElementById('rotCW2')?.addEventListener('click',()=>{ 
     eraser=false; eraserBtn2.classList.remove('danger'); 
-    if (selected && isBond(selected)){ 
-      selected.angle=(selected.angle+15)%360; 
-      hardReenablePorts();
-      draw(); saveWorkForQuestion(); 
-    } 
+    if (selected && isBond(selected)){ selected.angle=(selected.angle+15)%360; hardReenablePorts(); draw(); saveWorkForQuestion(); } 
   });
   document.getElementById('rotCCW2')?.addEventListener('click',()=>{ 
     eraser=false; eraserBtn2.classList.remove('danger'); 
-    if (selected && isBond(selected)){ 
-      selected.angle=(selected.angle-15+360)%360; 
-      hardReenablePorts();
-      draw(); saveWorkForQuestion(); 
-    } 
+    if (selected && isBond(selected)){ selected.angle=(selected.angle-15+360)%360; hardReenablePorts(); draw(); saveWorkForQuestion(); } 
   });
 
   function toCanvas(e){ const r=costruCanvas.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top}; }
-
   costruCanvas.addEventListener('mousemove',e=>{
     if (eraser){
       if (erasingHeld){
         const {x,y}=toCanvas(e);
-        cursorRing.x=x; cursorRing.y=y;
-        tryEraseAt(x,y);
-        draw();
-      }
-      return;
+        cursorRing.x=x; cursorRing.y=y; tryEraseAt(x,y); draw();
+      } return;
     }
-    if (dragNum2){
-      const {x,y}=toCanvas(e);
-      dragNum2.x=x; dragNum2.y=y; draw();
-      return;
-    }
+    if (dragNum2){ const {x,y}=toCanvas(e); dragNum2.x=x; dragNum2.y=y; draw(); return; }
     if (!drag) return;
     const {x,y}=toCanvas(e);
-    const A=pieces[drag.index];
-    const nx=x-drag.ox, ny=y-drag.oy;
-    const dx=nx-A.x, dy=ny-A.y;
-
-    const hasConnStrict = Object.values(A.connections||{}).some(c => c && findIndexById(c.peerId) >= 0);
-    if (hasConnStrict){
-      const comp = connectedComponentForPiece(A);
-      comp.forEach(p => { p.x += dx; p.y += dy; });
-    } else {
-      A.x += dx; A.y += dy;
-    }
-
-    if (typeof trySnapGroup === 'function' && trySnapGroup(A.groupId)) { draw(); } else { draw(); }
+    const A=pieces[drag.index]; const nx=x-drag.ox, ny=y-drag.oy; const dx=nx-A.x, dy=ny-A.y;
+    const hasConnStrict = Object.values(A.connections||{}).some(c => c && pieces.findIndex(p=>p.id===c.peerId) >= 0);
+    if (hasConnStrict){ const comp = connectedComponentForPiece(A); comp.forEach(p => { p.x += dx; p.y += dy; }); }
+    else { A.x += dx; A.y += dy; }
+    trySnapGroup(A.groupId); draw();
   });
-
   costruCanvas.addEventListener('mousedown',e=>{
     const {x,y}=toCanvas(e);
-    if (eraser){
-      erasingHeld = true;
-      cursorRing.x = x; cursorRing.y = y;
-      tryEraseAt(x,y);
-      draw();
-      return;
-    }
-    const n = hitNum2(x,y);
-    if (n){ dragNum2=n; return; }
-    const idx=selectAt(x,y); if (idx===-1) return;
-    const p=pieces[idx]; drag={index:idx, ox:x-p.x, oy:y-p.y};
+    if (eraser){ erasingHeld = true; cursorRing.x = x; cursorRing.y = y; tryEraseAt(x,y); draw(); return; }
+    const n = hitNum2(x,y); if (n){ dragNum2=n; return; }
+    const idx=selectAt(x,y); if (idx===-1) return; const p=pieces[idx]; drag={index:idx, ox:x-p.x, oy:y-p.y};
   });
   window.addEventListener('mouseup',()=>{
-    if (eraser){
-      erasingHeld=false;
-      cur.clearRect(0,0,costruCursor.width,costruCursor.height);
-      draw();
-    }
-    if (drag){ 
-      drag=null; 
-      hardReenablePorts();
-      saveWorkForQuestion(); 
-    }
+    if (eraser){ erasingHeld=false; cur.clearRect(0,0,costruCursor.width,costruCursor.height); draw(); }
+    if (drag){ drag=null; hardReenablePorts(); saveWorkForQuestion(); }
     if (dragNum2){ dragNum2=null; saveWorkForQuestion(); }
   });
-  costruCanvas.addEventListener('mouseleave', ()=>{
-    if (eraser){
-      erasingHeld=false;
-      cur.clearRect(0,0,costruCursor.width,costruCursor.height);
-      draw();
-    }
-    if (dragNum2){ dragNum2=null; saveWorkForQuestion(); }
-  });
+  costruCanvas.addEventListener('mouseleave', ()=>{ if (eraser){ erasingHeld=false; cur.clearRect(0,0,costruCursor.width,costruCursor.height); draw(); } if (dragNum2){ dragNum2=null; saveWorkForQuestion(); } });
 
   function toTouch(t){ const r=costruCanvas.getBoundingClientRect(); return {x:t.clientX-r.left, y:t.clientY-r.top}; }
   costruCanvas.addEventListener('touchmove',e=>{
     if(!e.touches.length) return;
     const {x,y}=toTouch(e.touches[0]);
-    if (eraser){
-      if (erasingHeld){
-        cursorRing.x=x; cursorRing.y=y;
-        tryEraseAt(x,y);
-        draw();
-      }
-      return;
-    }
-    if (dragNum2){
-      dragNum2.x=x; dragNum2.y=y; draw(); return;
-    }
+    if (eraser){ if (erasingHeld){ cursorRing.x=x; cursorRing.y=y; tryEraseAt(x,y); draw(); } return; }
+    if (dragNum2){ dragNum2.x=x; dragNum2.y=y; draw(); return; }
     if (!drag) return;
-    const A=pieces[drag.index];
-    const nx=x-drag.ox, ny=y-drag.oy; const dx=nx-A.x, dy=ny-A.y;
-
-    const hasConnStrict = Object.values(A.connections||{}).some(c => c && findIndexById(c.peerId) >= 0);
-    if (hasConnStrict){
-      const comp = connectedComponentForPiece(A);
-      comp.forEach(p => { p.x += dx; p.y += dy; });
-    } else {
-      A.x += dx; A.y += dy;
-    }
-
-    if (typeof trySnapGroup === 'function' && trySnapGroup(A.groupId)) { draw(); } else { draw(); }
+    const A=pieces[drag.index]; const nx=x-drag.ox, ny=y-drag.oy; const dx=nx-A.x, dy=ny-A.y;
+    const hasConnStrict = Object.values(A.connections||{}).some(c => c && pieces.findIndex(p=>p.id===c.peerId) >= 0);
+    if (hasConnStrict){ const comp = connectedComponentForPiece(A); comp.forEach(p => { p.x += dx; p.y += dy; }); }
+    else { A.x += dx; A.y += dy; }
+    trySnapGroup(A.groupId); draw();
   },{passive:true});
   costruCanvas.addEventListener('touchstart',e=>{
     if(!e.touches.length) return; const {x,y}=toTouch(e.touches[0]);
-    if (eraser){
-      erasingHeld=true; cursorRing.x=x; cursorRing.y=y; draw(); tryEraseAt(x,y); return;
-    }
-    const n = hitNum2(x,y);
-    if (n){ dragNum2=n; return; }
+    if (eraser){ erasingHeld=true; cursorRing.x=x; cursorRing.y=y; draw(); tryEraseAt(x,y); return; }
+    const n = hitNum2(x,y); if (n){ dragNum2=n; return; }
     const idx=selectAt(x,y); if (idx===-1) return; const p=pieces[idx]; drag={index:idx, ox:x-p.x, oy:y-p.y};
   },{passive:true});
   costruCanvas.addEventListener('touchend',()=>{
-    if (eraser){
-      erasingHeld=false;
-      cur.clearRect(0,0,costruCursor.width,costruCursor.height);
-      draw();
-    }
-    if (drag){ 
-      drag=null; 
-      hardReenablePorts();
-      saveWorkForQuestion(); 
-    }
+    if (eraser){ erasingHeld=false; cur.clearRect(0,0,costruCursor.width,costruCursor.height); draw(); }
+    if (drag){ drag=null; hardReenablePorts(); saveWorkForQuestion(); }
     if (dragNum2){ dragNum2=null; saveWorkForQuestion(); }
   },{passive:true});
 
@@ -1254,9 +1187,69 @@ nums1.addEventListener('mousemove',e=>{
 </script>
 
 <script>
-/* ===== Utility immagine per valutazione Sezione 1 (solo tratti + numeri) ===== */
-function luma601(r,g,b){ return 0.299*r + 0.587*g + 0.114*b; }
+/* ===== NLP Helpers (IT) ===== */
+function tokenizeIT(s){
+  return (s||'').toLowerCase()
+    .replace(/[^\wàèéìòóùç\-]+/g,' ')
+    .split(/\s+/).filter(Boolean);
+}
+// Estrai feature da un nome IUPAC "italianizzato"
+function parseNameFeaturesItalian(s){
+  const t = tokenizeIT(s);
+  const feats = new Set();
+  const chainMap = {
+    'met':1,'et':2,'prop':3,'but':4,'pent':5,'penta':5,'es':6,'esa':6,'ept':7,'epta':7,'ott':8,'otta':8,'non':9,'nona':9,'dec':10,'deca':10
+  };
+  const subs = ['metil','etil','propil','butil'];
+  const halos = ['cloro','bromo','fluoro','iodo','ioduro','clor','brom','fluor','iod'];
 
+  // insaturazioni
+  if (t.some(w=>/ene$/.test(w))) feats.add('ene');
+  if (t.some(w=>/ino$/.test(w))) feats.add('ino');
+
+  // ciclo
+  if (t.some(w=>w.includes('ciclo'))) feats.add('ciclo');
+
+  // sostituenti e alogeni
+  subs.forEach(su => { if (t.some(w=>w.includes(su))) feats.add('sub_'+su); });
+  halos.forEach(h => { if (t.some(w=>w.startsWith(h))) feats.add('halo_'+h.slice(0,2)); }); // cl, br, fl, io
+
+  // lunghezza catena principale (best-effort)
+  for (const [k,v] of Object.entries(chainMap)){
+    if (t.some(w=>w.includes(k))) { feats.add('C'+v); break; }
+  }
+
+  // posizioni numeriche (1..20)
+  const nums = (s.match(/\b\d+\b/g)||[]).map(x=>parseInt(x,10));
+  nums.forEach(n=>feats.add('pos'+n));
+
+  return feats;
+}
+// Deriva feature dalla struttura costruita
+function featuresFromStructureCounts(cnt){
+  const feats = new Set();
+  // catena principale approssimata dal numero di C (grezzo)
+  if (cnt.C>0) feats.add('C'+Math.min(cnt.C,10));
+  if ((cnt.bonds||{})['=']>0) feats.add('ene');
+  if ((cnt.bonds||{})['≡']>0) feats.add('ino');
+  if (cnt.Cl>0) feats.add('halo_cl');
+  if (cnt.Br>0) feats.add('halo_br');
+  if (cnt.F>0)  feats.add('halo_fl');
+  if (cnt.I>0)  feats.add('halo_io');
+  return feats;
+}
+function jaccard(aSet,bSet){
+  const a=new Set(aSet), b=new Set(bSet);
+  const inter=[...a].filter(x=>b.has(x)).length;
+  const uni=new Set([...a,...b]).size;
+  if (uni===0) return 0;
+  return inter/uni;
+}
+</script>
+
+<script>
+/* ===== Utility immagine per valutazione Sezione 1 ===== */
+function luma601(r,g,b){ return 0.299*r + 0.587*g + 0.114*b; }
 function loadImageData(src, w, h){
   return new Promise(res=>{
     const img=new Image();
@@ -1295,7 +1288,7 @@ function maskFromNonWhite(img, whiteTol=250){
   }
   return {mask:out,width,height};
 }
-// dilatazione più generosa (r=2, 2 passi)
+// dilatazione più generosa
 function dilate(mask, w, h, radius=2) {
   const out = new Uint8Array(mask.length);
   for (let y=0; y<h; y++) {
@@ -1434,9 +1427,10 @@ function renderBuildSnapshot(payload, width=800, height=500){
 </script>
 
 <script>
-/* ===== Valutazione & Riepilogo + consegna ===== */
+/* ===== Valutazione & Riepilogo + consegna (+ NLP + Lock) ===== */
 function editDistance(a,b){const dp=Array.from({length:b.length+1},(_,j)=>j);for(let i=1;i<=a.length;i++){let prev=i-1;dp[0]=i;for(let j=1;j<=b.length;j++){const tmp=dp[j];const cost=a[i-1]===b[j-1]?0:1;dp[j]=Math.min(dp[j]+1,dp[j-1]+1,prev+cost);prev=tmp;}}return dp[b.length];}
 function simFine(a,b){a=(a||'').toLowerCase().trim();b=(b||'').toLowerCase().trim();const L=Math.max(a.length,b.length);if(L===0)return 1;const ed=editDistance(a,b);const s=(L-ed)/L;if(s>=0.90)return 1.0;if(s>=0.75)return 0.75;if(s>=0.50)return 0.50;if(s>=0.25)return 0.25;return 0.0;}
+
 function countAtoms(listOrObj){
   let list = [];
   if (Array.isArray(listOrObj)){
@@ -1471,8 +1465,8 @@ function countAtoms(listOrObj){
   return cnt;
 }
 
-// NUOVA: niente 0.25 per vuoti, soglia minima struttura
-function scoreBuild(exp, got) {
+/* Sezione 2: struttura → punteggio (senza 0.25 minimo) */
+function scoreBuildStructOnly(exp, got) {
   const atomKeys = ['C','H','Cl','Br','F','I'];
   const bondKeys = ['—','=','≡'];
   const parts = [];
@@ -1496,11 +1490,10 @@ function scoreBuild(exp, got) {
 
   const totalAtoms = atomKeys.reduce((a,k)=>a+(got[k]||0),0);
   const totalBonds = bondKeys.reduce((a,k)=>a+((got.bonds||{})[k]||0),0);
-  const hasStructure = (totalAtoms + totalBonds) >= 3; // soglia minima
-
+  const hasStructure = (totalAtoms + totalBonds) >= 3;
   if (!hasStructure) return 0.0;
-  if (parts.length === 0) return 0.0;
 
+  if (parts.length === 0) return 0.0;
   const avg = parts.reduce((a,c)=>a+c,0) / parts.length;
   if (avg >= 0.90) return 1.0;
   if (avg >= 0.75) return 0.75;
@@ -1508,6 +1501,25 @@ function scoreBuild(exp, got) {
   if (avg >= 0.25) return 0.25;
   return 0.0;
 }
+
+/* NLP: Sez.1 (testo) + Sez.2 (feature) */
+function nlpScoreTextVsCorrect(userText, correctText){
+  const fUser = parseNameFeaturesItalian(userText);
+  const fCorr = parseNameFeaturesItalian(correctText);
+  const jac = jaccard(fUser, fCorr);        // 0..1
+  const fine = simFine(userText, correctText); // 0..1 discretizzato
+  // fusione: bilanciata
+  return 0.5*fine + 0.5*jac;
+}
+function nlpScoreBuild(questionText, gotCounts){
+  const featsExpected = parseNameFeaturesItalian(questionText);
+  const featsGot = featuresFromStructureCounts(gotCounts);
+  return jaccard(featsExpected, featsGot); // 0..1
+}
+
+/* ---- Consegna ---- */
+const UNLOCK_CODE = '5822';
+let resultLocked = true;
 
 document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
   const sicuro = confirm('Sei sicuro di voler consegnare la verifica?\nPremi "OK" per consegnare o "Annulla" per tornare indietro.');
@@ -1542,7 +1554,11 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
 
         const userTxt = (saved.text||'').trim();
         const corr = correctNames[file] || '';
-        const sText = userTxt ? simFine(userTxt, corr) : 0;
+
+        // NLP+fine per il testo
+        const sTextFine = userTxt ? simFine(userTxt, corr) : 0;
+        const sTextNLP  = userTxt ? nlpScoreTextVsCorrect(userTxt, corr) : 0;
+        const sText = 0.5*sTextFine + 0.5*sTextNLP; // 0..1
 
         let sStrokes=0, sNums=0, sVis=0;
         const key = (window.answerKeys||{})[file];
@@ -1566,9 +1582,9 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
         txt.innerHTML = `
           <div><strong>${esc(file.replace('.jpg',''))}</strong></div>
           <div>🧠 Sezione 1 (max 2):
-            <span class="badge ${badgeTxt}" title="testo">${(sText*(window.W_TEXT||1)).toFixed(2)} / ${(window.W_TEXT||1)}</span>
+            <span class="badge ${badgeTxt}" title="testo (NLP+sim)"> ${(sText*(window.W_TEXT||1)).toFixed(2)} / ${(window.W_TEXT||1)}</span>
             +
-            <span class="badge ${badgeVis}" title="annotazioni visive">${(sVis*(window.W_VIS||1)).toFixed(2)} / ${(window.W_VIS||1)}</span>
+            <span class="badge ${badgeVis}" title="annotazioni visive"> ${(sVis*(window.W_VIS||1)).toFixed(2)} / ${(window.W_VIS||1)}</span>
             =
             <span class="badge ${pts>=1.5?'ok':(pts>=1?'warn':'err')}">${pts.toFixed(2)} / 2.00</span>
           </div>
@@ -1588,9 +1604,7 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
 
         card.appendChild(txt); card.appendChild(imgs);
         cont1.appendChild(card);
-      }catch(err){
-        console.warn('[Sez1]', file, err);
-      }
+      }catch(err){ console.warn('[Sez1]', file, err); }
     }
 
     /* ===== Sezione 2 ===== */
@@ -1612,14 +1626,14 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
         try{ payload = raw ? JSON.parse(raw) : null; }catch(_){ payload=null; }
 
         const got = countAtoms(payload || []);
-        const s = scoreBuild(q.expected, got);
-        const pts = +(s*1).toFixed(2);
+        const sStruct = scoreBuildStructOnly(q.expected, got);         // 0..1
+        const sNlp    = nlpScoreBuild(q.testo, got);                   // 0..1
+        const s       = 0.6*sStruct + 0.4*sNlp;                        // fusione
+        const pts     = +(s*1).toFixed(2);
         puntiSec2 += pts;
 
         let studPNG = '';
-        try{
-          if (payload) studPNG = renderBuildSnapshot(payload, 800, 500);
-        }catch(_){ studPNG=''; }
+        try{ if (payload) studPNG = renderBuildSnapshot(payload, 800, 500); }catch(_){}
 
         const card = document.createElement('div'); card.className='card';
         const txt = document.createElement('div');
@@ -1627,7 +1641,9 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
         txt.innerHTML = `
           <div><strong>Domanda ${idx+1}</strong></div>
           <div class="mini"><em>Richiesta:</em> ${esc(q.testo)}</div>
-          <div>⚗️ Costruzione (max 1): <span class="badge ${badge}">${pts} / 1</span></div>
+          <div>⚗️ Costruzione (max 1): <span class="badge ${badge}">${pts} / 1</span>
+            <span class="mini">(struttura ${sStruct.toFixed(2)} · nlp ${sNlp.toFixed(2)})</span>
+          </div>
         `;
 
         const imgs = document.createElement('div'); imgs.className='wide';
@@ -1636,9 +1652,7 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
 
         card.appendChild(txt); card.appendChild(imgs);
         cont2.appendChild(card);
-      }catch(err){
-        console.warn('[Sez2] domanda', idx+1, err);
-      }
+      }catch(err){ console.warn('[Sez2] domanda', idx+1, err); }
     }
 
     const tot = puntiSec1 + puntiSec2; // max 13
@@ -1652,10 +1666,17 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
       </div>
     `;
 
+    // Mostra riepilogo + abilita conferma uscita ANCHE qui
     document.getElementById('resultSection').style.display='block';
-    enableLeaveWarning(true); // avviso anche nel riepilogo
+    enableLeaveWarning(true);
 
-    // Reset risposte SALVATE, ma lascia visibile il riepilogo già generato:
+    // Blocca riepilogo finché non inserisci il codice
+    resultLocked = true;
+    const lock = document.getElementById('lockOverlay');
+    lock.classList.add('active');
+    lock.style.display='block';
+
+    // Reset SALVATO ma mantieni video a schermo; NON spegnere l'avviso
     resetAllProgress({keepResult:true});
 
   } catch (err){
@@ -1664,7 +1685,30 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
   }
 });
 
-// Torna alla schermata iniziale dal riepilogo (e reset totale)
+/* Sblocco riepilogo */
+document.getElementById('unlockBtn').addEventListener('click', ()=>{
+  const inp = document.getElementById('unlockCode');
+  const msg = document.getElementById('unlockMsg');
+  if ((inp.value||'').trim() === UNLOCK_CODE){
+    resultLocked = false;
+    document.getElementById('lockOverlay').classList.remove('active');
+    document.getElementById('lockOverlay').style.display='none';
+    msg.textContent='';
+  } else {
+    msg.textContent='Codice errato';
+  }
+});
+
+/* Stampa con lock */
+document.getElementById('printBtn').addEventListener('click', ()=>{
+  if (resultLocked){
+    alert('Riepilogo bloccato. Inserisci il codice di sblocco per esportare il PDF.');
+    return;
+  }
+  window.print();
+});
+
+/* Torna alla home (reset totale) */
 document.getElementById('backHomeBtn').addEventListener('click', ()=>{
   if (confirm('Tornare alla schermata iniziale cancellerà tutte le risposte salvate. Procedere?')) {
     resetAllProgress({keepResult:false});
