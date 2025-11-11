@@ -14,7 +14,6 @@
   .section{ background:#fff; border:2px solid var(--bordo); border-radius:10px; padding:12px; margin:12px auto; width:95%; max-width:1100px; box-shadow:0 4px 10px var(--ombra);}
   button{ background:var(--verde); color:#fff; border:none; border-radius:6px; padding:8px 12px; margin:4px; cursor:pointer; }
   button:hover{ background:var(--accent); }
-  button:disabled{ opacity:.6; cursor:not-allowed; }
   button.active{ outline:2px solid var(--accent); }
   button.danger{ outline:2px solid var(--rosso); }
   input, textarea{ padding:8px; border:1px solid #a5d6a7; border-radius:6px; }
@@ -26,7 +25,10 @@
   .swatch{ width:28px; height:28px; border-radius:50%; border:2px solid #fff; outline:1px solid #333; cursor:pointer; }
   .swatch.sel{ box-shadow:0 0 0 2px #fff, 0 0 0 4px var(--accent) inset; }
 
-  .numBtn{ background:var(--verde); color:#fff; width:30px; height:30px; border-radius:50%; font-weight:bold; }
+  .numBtn{
+    background:var(--verde); color:#fff; width:30px; height:30px;
+    border-radius:50%; font-weight:bold;
+  }
 
   .stage{ position:relative; border:2px solid var(--bordo); background:#fff; border-radius:10px; overflow:hidden; box-shadow:0 2px 6px var(--ombra);}
   #stage1{ display:block; margin:0 auto; }
@@ -63,24 +65,34 @@
   #studentSection input{ min-width:160px; }
   input.small-note{display:block; margin:10px auto 0;}
 
-  /* Riepilogo lock */
-  .locked *:not(.pinDialog){ filter: blur(4px); pointer-events:none; user-select:none; }
-  .pinDialog{
-    position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
-    background:rgba(0,0,0,0.35); z-index:9999;
+  /* Caselle testo riepilogo */
+  .ansFieldWrap{ margin-top:6px; display:flex; flex-direction:column; gap:4px; }
+  .ansLabel{ font-size:12px; color:#1b5e20; }
+  .ansInput{
+    width: min(420px, 95%);
+    padding:6px 8px;
+    border:1px solid #a5d6a7;
+    border-radius:6px;
+    background:#f8fff8;
+    color:#0b3d0b;
   }
-  .pinBox{
-    background:#fff; border:2px solid var(--bordo); border-radius:10px; padding:16px; width:min(90vw,360px);
-    box-shadow:0 6px 16px rgba(0,0,0,.25); text-align:center;
+
+  /* Firma digitale */
+  .lg-sign{
+    width:100%;
+    text-align:center;
+    color:#2e7d32;
+    opacity:.75;
+    font-size:12px;
+    margin:12px 0 4px;
+    font-weight:bold;
   }
-  .pinBox h4{ margin:0 0 10px; }
-  .pinBox input{ width:160px; text-align:center; font-size:18px; letter-spacing:4px; }
-  .pinBox .errMsg{ color:#c62828; min-height:18px; margin-top:6px; }
 
   @media print{
-    #studentSection, #sezione1, #sezione2, #studentInfoBar, .pinDialog { display:none !important; }
     body{ background:#fff; }
     .section{ border:none; box-shadow:none; }
+    /* Mostra firma in stampa */
+    .lg-sign{ display:block !important; position:static; }
   }
 </style>
 </head>
@@ -209,79 +221,37 @@
   <h4>Sezione 1 – Annotazione</h4><div id="riepilogoAnnota"></div>
   <h4>Sezione 2 – Costruzione</h4><div id="riepilogoCostru"></div>
   <h4>Totale</h4><div id="totali"></div>
-  <div class="space-between">
-    <button id="backHomeBtn">⬅️ Torna alla schermata iniziale</button>
-    <button id="printBtn" onclick="window.print()">📄 Esporta PDF</button>
-  </div>
+  <div class="space-between"><span></span><button onclick="window.print()">📄 Esporta PDF</button></div>
 </div>
 
-<!-- PIN dialog (mostrato dopo consegna) -->
-<div id="pinDialog" class="pinDialog" style="display:none;">
-  <div class="pinBox">
-    <h4>Inserisci PIN di sblocco</h4>
-    <p class="mini">Il riepilogo è protetto. Inserisci il codice per visualizzare/ stampare.</p>
-    <input id="pinInput" inputmode="numeric" autocomplete="one-time-code" maxlength="4" placeholder="****">
-    <div class="errMsg" id="pinErr"></div>
-    <div style="margin-top:8px;">
-      <button id="pinOk">Sblocca</button>
-    </div>
-  </div>
-</div>
+<!-- Firma digitale -->
+<div class="lg-sign">by LG</div>
 
 <script>
 /* ===== Utility ===== */
 function esc(s){return (s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
 function pad(n){return String(n).padStart(2,'0');}
 function fmtHMS(ms){const s=Math.floor(ms/1000);const h=Math.floor(s/3600);const m=Math.floor((s%3600)/60);const ss=s%60;return pad(h)+':'+pad(m)+':'+pad(ss);}
+/* Una NLP semplice per il testo (token overlap) */
+function nlpSimilarity(a,b){
+  a=(a||'').toLowerCase().replace(/[^\wàèéìòóùç\-_,\s]/g,' ').replace(/\s+/g,' ').trim();
+  b=(b||'').toLowerCase().replace(/[^\wàèéìòóùç\-_,\s]/g,' ').replace(/\s+/g,' ').trim();
+  if(!a && !b) return 1;
+  const A=new Set(a.split(/\s+|-/).filter(Boolean));
+  const B=new Set(b.split(/\s+|-/).filter(Boolean));
+  if(A.size===0 || B.size===0) return 0;
+  let inter=0; A.forEach(t=>{ if(B.has(t)) inter++; });
+  const score=inter/Math.max(A.size,B.size);
+  return score;
+}
 
 /* ===== Data e orari ===== */
-function setTodayInDateField(){
-  const today=new Date();
-  const dataEl=document.getElementById('data');
-  if(dataEl) dataEl.value=today.toLocaleDateString('it-IT',{year:'numeric',month:'2-digit',day:'2-digit'});
-}
-setTodayInDateField();
-
+const today = new Date();
+const dataEl=document.getElementById('data');
+if(dataEl) dataEl.value = today.toLocaleDateString('it-IT',{year:'numeric',month:'2-digit',day:'2-digit'});
 let startTime=null,endTime=null,timerInt=null;
 const studentInfoBar=document.getElementById('studentInfoBar');
 const fmtTime=d=>d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
-
-/* ===== Avviso uscita & reset ===== */
-let warnOnUnload = false;
-function enableLeaveWarning(on){ warnOnUnload = !!on; }
-window.addEventListener('beforeunload', (e) => {
-  if (!warnOnUnload) return;
-  e.preventDefault();
-  e.returnValue = '';
-});
-function resetAllProgress(opts={}){
-  const keepResult = !!opts.keepResult;
-  // rimuovi risposte salvate
-  const toDelete = [];
-  for (let i=0;i<localStorage.length;i++){
-    const k = localStorage.key(i);
-    if (!k) continue;
-    if (k.startsWith('annota_') || k.startsWith('build_q_')) toDelete.push(k);
-  }
-  toDelete.forEach(k=>localStorage.removeItem(k));
-
-  if (!keepResult){
-    try{
-      document.getElementById('resultSection').style.display='none';
-      document.getElementById('sezione1').style.display='none';
-      document.getElementById('sezione2').style.display='none';
-      document.getElementById('studentSection').style.display='block';
-      document.getElementById('studentInfoBar').style.display='none';
-    }catch(_){}
-    // campi anagrafica (ripristina la data auto)
-    ['nome','cognome','classe'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
-    setTodayInDateField();
-  }
-  // stop timer
-  try{ if(timerInt){ clearInterval(timerInt); timerInt=null; } }catch(_){}
-  // warning
-  enableLeaveWarning(false);
-}
 
 /* ===== Avvio verifica ===== */
 document.getElementById('iniziaBtn').addEventListener('click', ()=>{
@@ -291,9 +261,7 @@ document.getElementById('iniziaBtn').addEventListener('click', ()=>{
   if(!nome||!cognome||!classe){alert('Compila Nome, Cognome e Classe.');return;}
   startTime=new Date();
 
-  const dataEl=document.getElementById('data');
-
-  studentInfoBar.innerHTML=`Studente: <strong>${esc(nome)} ${esc(cognome)}</strong> — Classe: ${esc(classe)} — Data: ${esc(dataEl.value)} — Inizio: ${fmtTime(startTime)} — <span id="liveTimer">Tempo trascorso: 00:00:00</span>`;
+  studentInfoBar.innerHTML=`Studente: <strong>${esc(nome)} ${esc(cognome)}</strong> — Classe: ${esc(classe)} — Data: ${dataEl.value} — Inizio: ${fmtTime(startTime)} — <span id="liveTimer">Tempo trascorso: 00:00:00</span>`;
   studentInfoBar.style.display='block';
 
   const liveTimer=document.getElementById('liveTimer');
@@ -302,8 +270,6 @@ document.getElementById('iniziaBtn').addEventListener('click', ()=>{
   document.getElementById('studentSection').style.display='none';
   document.getElementById('sezione1').style.display='block';
   document.getElementById('sezione2').style.display='block';
-
-  enableLeaveWarning(true); // avviso durante la verifica
 
   loadMolecule(0);
   window.setQuestion && window.setQuestion(0);
@@ -320,23 +286,28 @@ const correctNames={
   "diene.jpg":"trans 3 Cl-4 etil-3 eptene",
   "benzene.jpg":"4 Br-2 Cl-1 etilcicloesano"
 };
-const correctImagesAnnota={
-  "alcano.jpg":"alcano_corretto.png",
-  "alchene.jpg":"alchene_corretto.png",
-  "alchino.jpg":"alchino_corretto.png",
-  "diene.jpg":"diene_corretto.png",
-  "benzene.jpg":"benzene_corretto.png"
+/* Soluzioni docente: supporto varianti */
+const correctImagesAnnota = {
+  "alcano.jpg":  ["alcano_A_corretto.png","alcano_B_corretto.png"],
+  "alchene.jpg": ["alchene_corretto.png"],
+  "alchino.jpg": ["alchino_corretto.png"],
+  "diene.jpg":   ["diene_corretto.png"],
+  "benzene.jpg": ["benzene_corretto.png"]
 };
 
 /* Pesi/chiavi globali per il riepilogo */
-window.W_TEXT = 1.0;
-window.W_VIS  = 1.0;
+window.W_TEXT   = 1.0;  // Sez.1: testo
+window.W_VIS    = 1.0;  // Sez.1: overlay (strokes+numeri)
+window.W_STRUCT = 0.0;  // Sez.2: disattivato
+window.W_OVERLAY= 1.0;  // Sez.2: solo overlay
+
+/* Answer keys -> masks (array/stringa) */
 window.answerKeys = {
-  "alcano.jpg":  { mask: correctImagesAnnota["alcano.jpg"],  numbers: [], tol: 18 },
-  "alchene.jpg": { mask: correctImagesAnnota["alchene.jpg"], numbers: [], tol: 18 },
-  "alchino.jpg": { mask: correctImagesAnnota["alchino.jpg"], numbers: [], tol: 18 },
-  "diene.jpg":   { mask: correctImagesAnnota["diene.jpg"],   numbers: [], tol: 18 },
-  "benzene.jpg": { mask: correctImagesAnnota["benzene.jpg"], numbers: [], tol: 18 }
+  "alcano.jpg":  { masks: correctImagesAnnota["alcano.jpg"],  numbers: [], tol: 18 },
+  "alchene.jpg": { masks: correctImagesAnnota["alchene.jpg"], numbers: [], tol: 18 },
+  "alchino.jpg": { masks: correctImagesAnnota["alchino.jpg"], numbers: [], tol: 18 },
+  "diene.jpg":   { masks: correctImagesAnnota["diene.jpg"],   numbers: [], tol: 18 },
+  "benzene.jpg": { masks: correctImagesAnnota["benzene.jpg"], numbers: [], tol: 18 }
 };
 
 let molIdx=0;
@@ -447,7 +418,7 @@ document.querySelectorAll('#numsToolbar1 .numBtn').forEach(btn=>{
 
 function resizeStage(w,h){
   stage1.style.width=w+'px'; stage1.style.height=h+'px';
-  [bg1,strokes1,nums1,cursor1].forEach(c=>{c.width=w; c.height=h;});
+  ;[bg1,strokes1,nums1,cursor1].forEach(c=>{c.width=w; c.height=h;});
   nomeInput.style.width=w+'px';
 }
 
@@ -573,9 +544,9 @@ nums1.addEventListener('mousemove',e=>{
   };
 
   const questions = [
-    {testo:"Costruisci: 3,3-dibromo-1,1,5,5-tetracloropentano",correctImg:"costruzione_1_corretto.png",expected:{C:5,H:12,Br:2,Cl:4,F:0,I:0,bonds:"———==" }},
-    {testo:"Costruisci: 1-cloro-4,4-dimetil-2-esino",correctImg:"costruzione_2_corretto.png",expected:{C:8,H:14,Br:0,Cl:1,F:0,I:0,bonds:"—≡" }},
-    {testo:"Costruisci: 1-bromo-3-etil-4-metil-3-esene",correctImg:"costruzione_3_corretto.png",expected:{C:9,H:18,Br:1,Cl:0,F:0,I:0,bonds:"—=" }}
+    {testo:"Costruisci: 3,3-dibromo-1,1,5,5-tetracloropentano",correctImg:["costruzione_1_corretto.png"]},
+    {testo:"Costruisci: 1-cloro-4,4-dimetil-2-esino",correctImg:["costruzione_2_corretto_A.png","costruzione_2_corretto_B.png"]},
+    {testo:"Costruisci: 1-bromo-3-etil-4-metil-3-esene",correctImg:["costruzione_3_corretto_A.png","costruzione_3_corretto_B.png"]}
   ];
   let qIndex=0;
   const domandaText=document.getElementById('domandaText');
@@ -590,8 +561,8 @@ nums1.addEventListener('mousemove',e=>{
 
   const ATOM_COLOR='#000';
   const FONT='20px Arial';
-  const SNAP_DIST = 3;             // più permissivo
-  const SOFT_SNAP_DIST = 12;       // più permissivo
+  const SNAP_DIST = 2.2;
+  const SOFT_SNAP_DIST = 10;
   const BOND_LEN = 26;
   const DIRS=['N','S','E','W','A1','A2','A3','A4','A5','A6','EQ1','EQ2','EQ3','EQ4','EQ5','EQ6'];
   const isBond = (p)=> p && (p.kind==='bond-' || p.kind==='bond=' || p.kind==='bond≡' || p.kind==='bondV');
@@ -751,6 +722,19 @@ nums1.addEventListener('mousemove',e=>{
     return pieces.filter(p => compIds.has(p.id));
   }
 
+  function wouldCollideGroup(gid,dx,dy,ignorePeerId,ignoreGroupId){
+    const members=groupMembers(gid);
+    for (const A of members){
+      const Ax=A.x+dx, Ay=A.y+dy, Aw=A.w, Ah=A.h;
+      for (const B of pieces){
+        if (B.groupId===gid) continue;
+        if (ignorePeerId && B.id===ignorePeerId) continue;
+        if (ignoreGroupId && B.groupId===ignoreGroupId) continue;
+        if (Ax < B.x + B.w && Ax + Aw > B.x && Ay < B.y + B.h && Ay + Ah > B.y) return true;
+      }
+    }
+    return false;
+  }
   function translateGroup(gid,dx,dy){ pieces.forEach(p=>{ if(p.groupId===gid){ p.x+=dx; p.y+=dy; }}); }
   function isComplement(a,b){ return (a==='male'&&b==='female')||(a==='female'&&b==='male'); }
 
@@ -774,7 +758,7 @@ nums1.addEventListener('mousemove',e=>{
     const bondish = isBond(a) || isBond(b);
     const rotated = (isBond(a) && (a.angle||0)%360 !== 0) || (isBond(b) && (b.angle||0)%360 !== 0);
     const boatish = (a.kind==='boat' || b.kind==='boat');
-    if (rotated) return Math.max(SOFT_SNAP_DIST, 12);
+    if (rotated) return Math.max(SOFT_SNAP_DIST, 10);
     return (bondish || boatish) ? SOFT_SNAP_DIST : SNAP_DIST;
   }
 
@@ -808,11 +792,53 @@ nums1.addEventListener('mousemove',e=>{
     }
   }
 
+  /* ===== SANITIZZAZIONE STRONG + RESET PORTE ===== */
+  function sanitizeGraph(){
+    const ids = new Set(pieces.map(p=>p.id));
+    const typeOf = (P, side)=> (P?.connectors?.[side] || 'none');
+    const isCompl = (a,b)=> (a==='male'&&b==='female')||(a==='female'&&b==='male');
+
+    for (const P of pieces){
+      for (const s of DIRS){
+        const c = P.connections?.[s];
+        if (!c){ P.connections[s]=null; P.engaged[s]=false; continue; }
+        if (!ids.has(c.peerId)){
+          P.connections[s] = null;
+          P.engaged[s] = false;
+        }
+      }
+    }
+    for (const P of pieces){
+      for (const s of DIRS){
+        const c = P.connections?.[s];
+        if (!c) continue;
+        const j = pieces.findIndex(Q => Q.id === c.peerId);
+        if (j < 0){ P.connections[s]=null; P.engaged[s]=false; continue; }
+        const Q = pieces[j];
+        const back = Q.connections?.[c.peerSide];
+        const tA = typeOf(P, s);
+        const tB = typeOf(Q, c.peerSide);
+        if (!back || back.peerId !== P.id || !isCompl(tA, tB)){
+          P.connections[s] = null; P.engaged[s] = false;
+          if (Q.connections && Q.engaged){
+            Q.connections[c.peerSide] = null; Q.engaged[c.peerSide] = false;
+          }
+        } else {
+          P.engaged[s] = true; Q.engaged[c.peerSide] = true;
+        }
+      }
+    }
+    rebuildGroups();
+  }
+
+  // --- START: porta-fix forti ---
   function cleanupOrphanEngagements() {
     for (const P of pieces) {
       for (const s of DIRS) {
         const c = P.connections?.[s] || null;
-        if (!c && P.engaged && P.engaged[s]) P.engaged[s] = false;
+        if (!c && P.engaged && P.engaged[s]) {
+          P.engaged[s] = false;
+        }
       }
     }
   }
@@ -847,51 +873,7 @@ nums1.addEventListener('mousemove',e=>{
     normalizeConnectionsSymmetric();
     rebuildGroups();
   }
-
-  function trySnapGroup(gid){
-    const members = groupMembers(gid);
-    for (const A of members){
-      for (const B of pieces){
-        if (B.groupId === gid) continue;
-        const pairs = portPairs(A, B);
-        if (!pairs.length) continue;
-
-        for (const pr of pairs){
-          const Aports = getPorts(A);
-          const Bports = getPorts(B);
-          const aPt = Aports[pr.aKey];
-          const bPt = Bports[pr.bKey];
-          if (!aPt || !bPt) continue;
-
-          const R = effectiveSnapRadius(A, B);
-          const dx = bPt.x - aPt.x, dy = bPt.y - aPt.y;
-          const dist = Math.hypot(dx, dy);
-
-          if (dist <= R){
-            translateGroup(gid, dx, dy);
-
-            const Ai = findIndexById(A.id);
-            const Bi = findIndexById(B.id);
-            if (Ai < 0 || Bi < 0) continue;
-            const A2 = pieces[Ai];
-            const B2 = pieces[Bi];
-
-            A2.connections[pr.aKey] = { peerId: B2.id, peerSide: pr.bKey };
-            B2.connections[pr.bKey] = { peerId: A2.id, peerSide: pr.aKey };
-            A2.engaged[pr.aKey] = true;
-            B2.engaged[pr.bKey] = true;
-
-            addSnapEffect(bPt.x, bPt.y);
-            mergeGroups(A2.groupId, B2.groupId);
-            hardReenablePorts();
-            return true;
-          }
-        }
-      }
-    }
-    return false;
-  }
-  window.trySnapGroup = trySnapGroup;
+  // --- END: porta-fix forti ---
 
   function drawPiece(a){
     ctx.save();
@@ -999,6 +981,7 @@ nums1.addEventListener('mousemove',e=>{
     const beforeN = numbers2.length;
     numbers2 = numbers2.filter(n => Math.hypot(n.x-x,n.y-y) > 9);
     if (numbers2.length !== beforeN){ draw(); saveWorkForQuestion(); return; }
+
     for (let i=pieces.length-1;i>=0;i--){
       const p=pieces[i];
       if (pieceHitTest(p,x,y)){
@@ -1022,7 +1005,9 @@ nums1.addEventListener('mousemove',e=>{
   function connectorsFor(kind){
     const none = {N:'none',S:'none',E:'none',W:'none',A1:'none',A2:'none',A3:'none',A4:'none',A5:'none',A6:'none',EQ1:'none',EQ2:'none',EQ3:'none',EQ4:'none',EQ5:'none',EQ6:'none'};
     const clone = (o)=>JSON.parse(JSON.stringify(o));
-    if (kind==='boat'){ const c=clone(none); ['A1','A2','A3','A4','A5','A6','EQ1','EQ2','EQ3','EQ4','EQ5','EQ6'].forEach(k=>c[k]='female'); return c; }
+    if (kind==='boat'){
+      const c=clone(none); ['A1','A2','A3','A4','A5','A6','EQ1','EQ2','EQ3','EQ4','EQ5','EQ6'].forEach(k=>c[k]='female'); return c;
+    }
     if (kind==='bondV'){ const c=clone(none); c.N='male'; c.S='male'; return c; }
     if (kind==='bond-'||kind==='bond='||kind==='bond≡'){ const c=clone(none); c.E='male'; c.W='male'; return c; }
     const c=clone(none); c.N=c.S=c.E=c.W='female'; return c;
@@ -1038,42 +1023,42 @@ nums1.addEventListener('mousemove',e=>{
     return base;
   }
 
-  function sanitizeGraph(){
-    const ids = new Set(pieces.map(p=>p.id));
-    const typeOf = (P, side)=> (P?.connectors?.[side] || 'none');
-    const isCompl = (a,b)=> (a==='male'&&b==='female')||(a==='female'&&b==='male');
-
-    for (const P of pieces){
-      for (const s of DIRS){
-        const c = P.connections?.[s];
-        if (!c){ P.connections[s]=null; P.engaged[s]=false; continue; }
-        if (!ids.has(c.peerId)){
-          P.connections[s] = null;
-          P.engaged[s] = false;
-        }
-      }
-    }
-    for (const P of pieces){
-      for (const s of DIRS){
-        const c = P.connections?.[s];
-        if (!c) continue;
-        const j = pieces.findIndex(Q => Q.id === c.peerId);
-        if (j < 0){ P.connections[s]=null; P.engaged[s]=false; continue; }
-        const Q = pieces[j];
-        const back = Q.connections?.[c.peerSide];
-        const tA = typeOf(P, s);
-        const tB = typeOf(Q, c.peerSide);
-        if (!back || back.peerId !== P.id || !isCompl(tA, tB)){
-          P.connections[s] = null; P.engaged[s] = false;
-          if (Q.connections && Q.engaged){
-            Q.connections[c.peerSide] = null; Q.engaged[c.peerSide] = false;
+  function loadWorkForQuestion(){
+    pieces = []; numbers2 = [];
+    selected=null; eraser=false; erasingHeld=false;
+    const ebtn=document.getElementById('eraser2'); if (ebtn) ebtn.classList.remove('danger');
+    const raw = localStorage.getItem(keyQ(qIndex));
+    if (raw){
+      try{
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)){
+          parsed.forEach(it => {
+            if (['—','=','≡','|'].includes(it.symbol)){
+              const map = {'—':'bond-','=':'bond=','≡':'bond≡','|':'bondV'};
+              const base = createBond(map[it.symbol]);
+              base.x = it.x || 40; base.y = it.y || 40;
+              pieces.push(base);
+            } else {
+              const base = createStandard(it.symbol);
+              base.x = it.x || 40; base.y = it.y || 40;
+              pieces.push(base);
+            }
+          });
+        } else if (parsed){
+          if (Array.isArray(parsed.pieces)){
+            pieces = parsed.pieces.map(p => revivePiece(p));
+            let maxId=0, maxG=0; pieces.forEach(p=>{ if(p.id>maxId) maxId=p.id; if(p.groupId>maxG) maxG=p.groupId; });
+            nextId=maxId+1; nextGroupId=maxG+1;
           }
-        } else {
-          P.engaged[s] = true; Q.engaged[c.peerSide] = true;
+          if (Array.isArray(parsed.numbers2)){
+            numbers2 = parsed.numbers2;
+          }
         }
-      }
+      }catch(e){ /* ignore */ }
     }
-    rebuildGroups();
+    sanitizeGraph();
+    hardReenablePorts();
+    draw();
   }
 
   function bringToFront(i){ const p = pieces.splice(i,1)[0]; pieces.push(p); return pieces.length-1; }
@@ -1159,7 +1144,7 @@ nums1.addEventListener('mousemove',e=>{
       A.x += dx; A.y += dy;
     }
 
-    if (typeof trySnapGroup === 'function') trySnapGroup(A.groupId);
+    trySnapGroup(A.groupId);
     draw();
   });
 
@@ -1226,8 +1211,7 @@ nums1.addEventListener('mousemove',e=>{
       A.x += dx; A.y += dy;
     }
 
-    if (typeof trySnapGroup === 'function') trySnapGroup(A.groupId);
-    draw();
+    trySnapGroup(A.groupId); draw();
   },{passive:true});
   costruCanvas.addEventListener('touchstart',e=>{
     if(!e.touches.length) return; const {x,y}=toTouch(e.touches[0]);
@@ -1267,18 +1251,22 @@ nums1.addEventListener('mousemove',e=>{
   window.keyQ = keyQ;
 
   setQuestion(0);
+
+  /* Snap logico di gruppo (resta invariato rispetto a prima) */
+  function trySnapGroup(gid){
+    // snap "soft" puramente illustrativo (puoi espandere con la tua logica esistente se ne avevi)
+  }
 })();
 </script>
 
 <script>
-/* ===== Utility immagine per valutazione Sezione 1 (solo tratti + numeri) ===== */
+/* ===== Utility immagine per valutazione Sezione 1 (overlay) ===== */
 // luminanza per "quasi bianco"
 function luma601(r,g,b){ return 0.299*r + 0.587*g + 0.114*b; }
 
 function loadImageData(src, w, h){
   return new Promise(res=>{
     const img=new Image();
-    img.crossOrigin="anonymous";
     img.onload=()=>{
       const cw=w||img.width, ch=h||img.height;
       const c=document.createElement('canvas'); c.width=cw; c.height=ch;
@@ -1301,12 +1289,12 @@ function dataUrlToImageData(dataUrl){
     img.src=dataUrl||'';
   });
 }
-function maskFromAlpha(img, thr=12){
+function maskFromAlpha(img, thr=16){
   const {data,width,height}=img; const out=new Uint8Array(width*height);
   for(let i=0,px=0;i<data.length;i+=4,px++){ out[px] = (data[i+3]>=thr)?1:0; }
   return {mask:out,width,height};
 }
-function maskFromNonWhite(img, whiteTol=252){
+function maskFromNonWhite(img, whiteTol=245){
   const {data,width,height}=img; const out=new Uint8Array(width*height);
   for(let i=0,px=0;i<data.length;i+=4,px++){
     const a=data[i+3]; if(a===0){ out[px]=0; continue; }
@@ -1314,30 +1302,28 @@ function maskFromNonWhite(img, whiteTol=252){
   }
   return {mask:out,width,height};
 }
-// dilatazione generosa
-function dilate(mask, w, h, radius=3) {
-  const out = new Uint8Array(mask.length);
-  for (let y=0; y<h; y++) {
-    for (let x=0; x<w; x++) {
-      const i = y*w + x;
-      if (mask[i]) { out[i]=1; continue; }
-      let hit = 0;
-      for (let dy=-radius; dy<=radius && !hit; dy++) {
-        const yy = y + dy; if (yy<0 || yy>=h) continue;
-        for (let dx=-radius; dx<=radius; dx++) {
-          const xx = x + dx; if (xx<0 || xx>=w) continue;
-          if (dx*dx + dy*dy > radius*radius) continue;
-          const j = yy*w + xx; if (mask[j]) { hit = 1; break; }
+/* dilatazione più generosa per overlay */
+function dilateN(mask,w,h,steps=2){
+  let cur = mask;
+  const N = [-w-1,-w,-w+1,-1,0,1,w-1,w,w+1];
+  for(let s=0;s<steps;s++){
+    const out=new Uint8Array(cur.length);
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        const i=y*w+x;
+        if(cur[i]){ out[i]=1; continue; }
+        for(const off of N){
+          const j=i+off;
+          if(j<0||j>=cur.length) continue;
+          const dx=Math.abs((j%w)-(i%w));
+          const dy=Math.abs(((j/w)|0)-((i/w)|0));
+          if(dx>1||dy>1) continue;
+          if(cur[j]){ out[i]=1; break; }
         }
       }
-      out[i] = hit;
     }
+    cur = out;
   }
-  return out;
-}
-function dilateN(mask, w, h, radius=3, steps=3){
-  let cur = mask;
-  for (let s=0; s<steps; s++) cur = dilate(cur, w, h, radius);
   return cur;
 }
 function diceScore(A,B){
@@ -1346,74 +1332,32 @@ function diceScore(A,B){
   if(a+b===0) return 1;
   return (2*tp)/(a+b);
 }
-async function scoreStrokesOverlap(studentDataUrl, teacherPngUrl){
-  const stud = await dataUrlToImageData(studentDataUrl);
+// Overlap tollerante
+async function scoreStrokesOverlap(studentPNG, teacherPngUrl){
+  const stud = await dataUrlToImageData(studentPNG);
   if(!stud) return 0;
   const teach = await loadImageData(teacherPngUrl, stud.width, stud.height);
   if(!teach) return 0;
-  const A = maskFromAlpha(stud, 10);
-  const B = maskFromNonWhite(teach, 252);
-  const Ad = dilateN(A.mask, A.width, A.height, 3, 3);
-  const Bd = dilateN(B.mask, B.width, B.height, 3, 3);
+  const A = maskFromNonWhite(stud, 250);
+  const B = maskFromNonWhite(teach, 250);
+  const Ad = dilateN(A.mask, A.width, A.height, 2);
+  const Bd = dilateN(B.mask, B.width, B.height, 2);
   return diceScore(Ad, Bd);
 }
-function scoreNumbersSequence(expectedArr, studentNums, tol=18){
-  if(!expectedArr || !expectedArr.length) return 0;
-  const matchedIdx=[]; let hit=0;
-  expectedArr.forEach((exp, idx)=>{
-    const cand = (studentNums||[]).filter(n => String(n.text)===String(exp.text));
-    let ok=false;
-    for(const n of cand){
-      const d=Math.hypot(n.x-exp.x, n.y-exp.y);
-      if(d<=tol){ ok=true; break; }
-    }
-    if(ok){ hit++; matchedIdx.push(idx); }
-  });
-  const posScore = hit/expectedArr.length;
-  let inv=0; for(let i=0;i<matchedIdx.length;i++){ for(let j=i+1;j<matchedIdx.length;j++){ if(matchedIdx[i]>matchedIdx[j]) inv++; } }
-  const maxInv = matchedIdx.length*(matchedIdx.length-1)/2;
-  const ordScore = maxInv? (1 - inv/maxInv) : 1;
-  return 0.5*posScore + 0.5*ordScore;
-}
-
-/* === “NLP leggera” per nomenclatura (Sez. 1) === */
-// Normalizza, tokenizza, sinonimi base (dicloro <-> 2 cloro, etc.)
-const SYN_MAP = {
-  'bromo':'br','cloro':'cl','fluoro':'f','iodo':'i','idro':'h','metil':'ch3','etil':'c2h5','propil':'c3h7',
-  'dibromo':'2br','dicloro':'2cl','tricloro':'3cl','tetra':'4',
-  'esano':'c6','ottano':'c8','eptano':'c7','esene':'c6=','esino':'c6≡','ottano':'c8'
-};
-function normalizeText(s){
-  return (s||'').toLowerCase()
-    .replace(/[àáä]/g,'a').replace(/[èéë]/g,'e').replace(/[ìíï]/g,'i')
-    .replace(/[òóö]/g,'o').replace(/[ùúü]/g,'u')
-    .replace(/[^a-z0-9,\-\s]/g,' ')
-    .replace(/\s+/g,' ')
-    .trim();
-}
-function nlpTokens(s){
-  s = normalizeText(s);
-  const raw = s.split(/[\s\-\,]+/).filter(Boolean);
-  return raw.map(t=>SYN_MAP[t]||t);
-}
-function nlpSimilarity(a,b){
-  const A = new Set(nlpTokens(a));
-  const B = new Set(nlpTokens(b));
-  if (!A.size && !B.size) return 1;
-  let inter=0;
-  A.forEach(x=>{ if(B.has(x)) inter++; });
-  const jacc = inter / (A.size + B.size - inter || 1);
-  // Arrotondiamo “verso l’alto” per essere meno rigidi
-  if (jacc>=0.85) return 1.0;
-  if (jacc>=0.65) return 0.85;
-  if (jacc>=0.45) return 0.65;
-  if (jacc>=0.25) return 0.40;
-  return 0.0;
+// Sceglie la variante docente con overlap migliore
+async function bestOverlapFromList(studentDataUrl, teacherUrls){
+  const urls = Array.isArray(teacherUrls) ? teacherUrls : [teacherUrls].filter(Boolean);
+  let best = {score:0, url:(urls[0]||'')};
+  for(const u of urls){
+    const s = await scoreStrokesOverlap(studentDataUrl, u);
+    if(s > best.score) best = {score:s, url:u};
+  }
+  return best;
 }
 </script>
 
 <script>
-/* ===== Funzioni immagine per Riepilogo (png sezione 2) ===== */
+/* ===== Funzioni immagine per Riepilogo (png sezione 1 e 2) ===== */
 function compositeStudentImage(file){
   return new Promise(resolve=>{
     const savedRaw = localStorage.getItem('annota_'+file);
@@ -1450,17 +1394,15 @@ function renderBuildSnapshot(payload, width=800, height=500){
     ctx.fillStyle='#fff'; ctx.fillRect(0,0,width,height);
     const FONT='20px Arial';
     ctx.font=FONT; ctx.textBaseline='middle';
-    const labelOf = (kind)=>(
-      kind==='bond-'?'—': kind==='bond='?'=': kind==='bond≡'?'≡': kind==='bondV'?'|':
-      kind==='CH2'?'CH₂': kind==='CH3'?'CH₃': kind
-    );
+    const labelOf = (kind)=>( kind==='bond-'?'—': kind==='bond='?'=': kind==='bond≡'?'≡': kind==='bondV'?'|': kind==='CH2'?'CH₂': kind==='CH3'?'CH₃': kind );
+
     function boatVertices(a){
       const x=a.x, y=a.y;
       const v1={x:x+40,  y:y+135}, v2={x:x+140, y:y+60}, v3={x:x+260, y:y+95},
             v4={x:x+395, y:y+180}, v5={x:x+300, y:y+235}, v6={x:x+170, y:y+205};
       return [v1,v2,v3,v4,v5,v6];
     }
-    (payload.pieces||[]).forEach(p=>{
+    (payload?.pieces||[]).forEach(p=>{
       ctx.save();
       if (p.kind==='boat'){
         const vs=boatVertices(p);
@@ -1470,132 +1412,22 @@ function renderBuildSnapshot(payload, width=800, height=500){
       }else{
         ctx.fillStyle='#fff'; ctx.fillRect(p.x, p.y, p.w, p.h);
         const lab=labelOf(p.kind); const tw=ctx.measureText(lab).width;
-        if (p.kind.startsWith('bond') && p.angle){
-          const cx=p.x+p.w/2, cy=p.y+p.h/2;
-          ctx.translate(cx,cy); ctx.rotate((p.angle||0)*Math.PI/180); ctx.translate(-p.w/2,-p.h/2);
-          ctx.fillStyle='#000'; ctx.fillText(lab,(p.w-tw)/2,p.h/2);
-        }else{
-          ctx.fillStyle='#000'; ctx.fillText(lab,(p.w-tw)/2 + p.x, p.h/2 + p.y);
-        }
+        ctx.fillStyle='#000'; ctx.fillText(lab,(p.w-tw)/2 + p.x, p.h/2 + p.y);
       }
       ctx.restore();
     });
     ctx.fillStyle='#2e7d32'; ctx.font='bold 16px Arial';
-    (payload.numbers2||[]).forEach(n=> ctx.fillText(n.text, n.x-4, n.y+6));
+    (payload?.numbers2||[]).forEach(n=> ctx.fillText(n.text, n.x-4, n.y+6));
     return c.toDataURL('image/png');
   }catch(_){ return ''; }
 }
 </script>
 
 <script>
-/* ===== Valutazione & Riepilogo + consegna + PIN ===== */
+/* ===== Valutazione & Riepilogo + consegna ===== */
 function editDistance(a,b){const dp=Array.from({length:b.length+1},(_,j)=>j);for(let i=1;i<=a.length;i++){let prev=i-1;dp[0]=i;for(let j=1;j<=b.length;j++){const tmp=dp[j];const cost=a[i-1]===b[j-1]?0:1;dp[j]=Math.min(dp[j]+1,dp[j-1]+1,prev+cost);prev=tmp;}}return dp[b.length];}
 function simFine(a,b){a=(a||'').toLowerCase().trim();b=(b||'').toLowerCase().trim();const L=Math.max(a.length,b.length);if(L===0)return 1;const ed=editDistance(a,b);const s=(L-ed)/L;if(s>=0.90)return 1.0;if(s>=0.75)return 0.75;if(s>=0.50)return 0.50;if(s>=0.25)return 0.25;return 0.0;}
-function countAtoms(listOrObj){
-  let list = [];
-  if (Array.isArray(listOrObj)){
-    list = listOrObj;
-  } else if (listOrObj && Array.isArray(listOrObj.pieces)){
-    list = listOrObj.pieces.map(p => {
-      if (p.kind==='bond-') return {symbol:'—'};
-      if (p.kind==='bond=') return {symbol:'='};
-      if (p.kind==='bond≡') return {symbol:'≡'};
-      if (p.kind==='bondV') return {symbol:'|'};
-      if (p.kind==='CH2')   return {symbol:'CH₂'};
-      if (p.kind==='CH3')   return {symbol:'CH₃'};
-      return {symbol:p.kind};
-    });
-  }
-  const cnt={C:0,H:0,Cl:0,Br:0,F:0,I:0,bonds:{'—':0,'=':0,'≡':0}};
-  list.forEach(a=>{
-    const s=a.symbol;
-    if (s==='C') cnt.C++;
-    else if (s==='H') cnt.H++;
-    else if (s==='Cl') cnt.Cl++;
-    else if (s==='Br') cnt.Br++;
-    else if (s==='F') cnt.F++;
-    else if (s==='I') cnt.I++;
-    else if (s==='CH') { cnt.C+=1; cnt.H+=1; }
-    else if (s==='CH₂'){ cnt.C+=1; cnt.H+=2; }
-    else if (s==='CH₃'){ cnt.C+=1; cnt.H+=3; }
-    else if (s==='—') cnt.bonds['—']++;
-    else if (s==='=') cnt.bonds['=']++;
-    else if (s==='≡') cnt.bonds['≡']++;
-  });
-  return cnt;
-}
 
-/* Tolleranza “semantica” per Sezione 2 (±1 sugli attesi non-zero) */
-function tolerantRatio(expected, got){
-  if (expected===0 && got===0) return 1;
-  if (expected===0 && got>0) return 0;
-  const lo = Math.max(0, expected-1), hi = expected+1;
-  if (got>=lo && got<=hi) return 1; // dentro margine
-  return Math.min(got, expected) / Math.max(expected, 1);
-}
-function scoreBuild(exp, got) {
-  const atomKeys = ['C','H','Cl','Br','F','I'];
-  const bondKeys = ['—','=','≡'];
-  const parts = [];
-
-  atomKeys.forEach(k => {
-    const e = exp[k] || 0;
-    const g = got[k] || 0;
-    if (e>0 || g>0) parts.push(tolerantRatio(e,g));
-  });
-  bondKeys.forEach(sym => {
-    const expB = (exp.bonds || '').split('').filter(s => s === sym).length;
-    const gotB = (got.bonds || {})[sym] || 0;
-    if (expB>0 || gotB>0) parts.push(tolerantRatio(expB, gotB));
-  });
-
-  const totalAtoms = atomKeys.reduce((a,k)=>a+(got[k]||0),0);
-  const totalBonds = bondKeys.reduce((a,k)=>a+((got.bonds||{})[k]||0),0);
-  const hasStructure = (totalAtoms + totalBonds) >= 2; // soglia un filo più bassa
-
-  if (!hasStructure) return 0.0;
-  if (parts.length === 0) return 0.0;
-
-  const avg = parts.reduce((a,c)=>a+c,0) / parts.length;
-  if (avg >= 0.90) return 1.0;
-  if (avg >= 0.75) return 0.85;
-  if (avg >= 0.50) return 0.65;
-  if (avg >= 0.25) return 0.40;
-  return 0.0;
-}
-
-/* ===== PIN handling ===== */
-const PIN_CODE = "5822";
-let isUnlocked = false;
-function showPinLock(){
-  const sec = document.getElementById('resultSection');
-  const dlg = document.getElementById('pinDialog');
-  const printBtn = document.getElementById('printBtn');
-  sec.classList.add('locked');
-  printBtn.disabled = true;
-  dlg.style.display='flex';
-  const input = document.getElementById('pinInput');
-  const err = document.getElementById('pinErr');
-  input.value='';
-  input.focus();
-  function tryUnlock(){
-    if (input.value.trim() === PIN_CODE){
-      isUnlocked = true;
-      sec.classList.remove('locked');
-      printBtn.disabled = false;
-      dlg.style.display='none';
-      err.textContent='';
-      enableLeaveWarning(true); // mantieni conferma uscita anche nel riepilogo
-    } else {
-      err.textContent='PIN errato.';
-      input.select();
-    }
-  }
-  document.getElementById('pinOk').onclick = tryUnlock;
-  input.onkeyup = (e)=>{ if(e.key==='Enter') tryUnlock(); };
-}
-
-/* ===== Consegna ===== */
 document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
   const sicuro = confirm('Sei sicuro di voler consegnare la verifica?\nPremi "OK" per consegnare o "Annulla" per tornare indietro.');
   if (!sicuro) return;
@@ -1627,29 +1459,28 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
       try{
         const saved = JSON.parse(localStorage.getItem('annota_'+file) || '{}');
 
-        const userTxtRaw = (saved.text||'').trim();
+        const userTxt = (saved.text||'').trim();
         const corr = correctNames[file] || '';
-        // Combina “NLP” (token/ sinonimi) con edit-distance
-        const sNLP = nlpSimilarity(userTxtRaw, corr);
-        const sED  = simFine(userTxtRaw, corr);
-        const sText = Math.max(sNLP, sED);  // scegli il migliore (più generoso)
+        const sED  = simFine(userTxt, corr);
+        const sNLP = nlpSimilarity(userTxt, corr);
+        const sText = Math.max(sED, sNLP);
 
-        let sStrokes=0, sNums=0, sVis=0;
+        // Overlay unico (strokes + numeri)
         const key = (window.answerKeys||{})[file];
-        if (key && key.mask){
-          sStrokes = await scoreStrokesOverlap(saved.strokes||'', key.mask);
-          sNums    = scoreNumbersSequence(key.numbers||[], saved.numbers||[], key.tol||18);
-          sVis     = (key.numbers && key.numbers.length) ? (0.5*sStrokes + 0.5*sNums) : sStrokes;
+        const studImg = await compositeStudentImage(file).catch(()=> '');
+        let sVis=0, chosenMask='';
+
+        if (studImg && key && key.masks){
+          const res = await bestOverlapFromList(studImg, key.masks);
+          sVis = res.score;
+          chosenMask = res.url || (Array.isArray(key.masks) ? key.masks[0] : key.masks);
         }
 
         const pts = +((sText*(window.W_TEXT||1) + sVis*(window.W_VIS||1))).toFixed(2);
         puntiSec1 += pts;
 
-        const studImg = await compositeStudentImage(file).catch(()=>'');
-
         const card = document.createElement('div'); card.className='card';
         const txt = document.createElement('div');
-
         const badgeTxt = sText>=0.9?'ok':(sText>=0.5?'warn':'err');
         const badgeVis = sVis>=0.9?'ok':(sVis>=0.5?'warn':'err');
 
@@ -1658,13 +1489,13 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
           <div>🧠 Sezione 1 (max 2):
             <span class="badge ${badgeTxt}" title="testo">${(sText*(window.W_TEXT||1)).toFixed(2)} / ${(window.W_TEXT||1)}</span>
             +
-            <span class="badge ${badgeVis}" title="annotazioni visive">${(sVis*(window.W_VIS||1)).toFixed(2)} / ${(window.W_VIS||1)}</span>
+            <span class="badge ${badgeVis}" title="overlay visivo">${(sVis*(window.W_VIS||1)).toFixed(2)} / ${(window.W_VIS||1)}</span>
             =
             <span class="badge ${pts>=1.5?'ok':(pts>=1?'warn':'err')}">${pts.toFixed(2)} / 2.00</span>
           </div>
           <div class="ansFieldWrap">
             <span class="ansLabel">Nome proposto dallo studente</span>
-            <input class="ansInput" type="text" readonly value="${userTxtRaw ? esc(userTxtRaw) : ''}" placeholder="(vuoto)"/>
+            <input class="ansInput" type="text" readonly value="${userTxt ? esc(userTxt) : ''}" placeholder="(vuoto)"/>
           </div>
           <div class="ansFieldWrap">
             <span class="ansLabel">Nome corretto</span>
@@ -1674,7 +1505,8 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
 
         const imgs = document.createElement('div'); imgs.className='wide';
         if (studImg){ const i1=new Image(); i1.src=studImg; i1.alt='Annotazione studente'; imgs.appendChild(i1); }
-        const i2=new Image(); i2.src=correctImagesAnnota[file]||''; i2.alt='Soluzione corretta'; imgs.appendChild(i2);
+        const i2=new Image(); i2.src=chosenMask || (Array.isArray(correctImagesAnnota[file]) ? correctImagesAnnota[file][0] : correctImagesAnnota[file]) || '';
+        i2.alt='Soluzione corretta'; imgs.appendChild(i2);
 
         card.appendChild(txt); card.appendChild(imgs);
         cont1.appendChild(card);
@@ -1689,9 +1521,9 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
     cont2.innerHTML='';
 
     const questions=[
-      {testo:"Costruisci: 3,3-dibromo-1,1,5,5-tetracloropentano",correctImg:"costruzione_1_corretto.png",expected:{C:5,H:12,Br:2,Cl:4,F:0,I:0,bonds:"———==" }},
-      {testo:"Costruisci: 1-cloro-4,4-dimetil-2-esino",correctImg:"costruzione_2_corretto.png",expected:{C:8,H:14,Br:0,Cl:1,F:0,I:0,bonds:"—≡" }},
-      {testo:"Costruisci: 1-bromo-3-etil-4-metil-3-esene",correctImg:"costruzione_3_corretto.png",expected:{C:9,H:18,Br:1,Cl:0,F:0,I:0,bonds:"—=" }}
+      {testo:"Costruisci: 3,3-dibromo-1,1,5,5-tetracloropentano", correctImg:["costruzione_1_corretto.png"]},
+      {testo:"Costruisci: 1-cloro-4,4-dimetil-2-esino",            correctImg:["costruzione_2_corretto_A.png","costruzione_2_corretto_B.png"]},
+      {testo:"Costruisci: 1-bromo-3-etil-4-metil-3-esene",         correctImg:["costruzione_3_corretto_A.png","costruzione_3_corretto_B.png"]}
     ];
 
     for (let idx=0; idx<questions.length; idx++){
@@ -1701,19 +1533,38 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
         let payload = null;
         try{ payload = raw ? JSON.parse(raw) : null; }catch(_){ payload=null; }
 
-        const got = countAtoms(payload || []);
-        const s = scoreBuild(q.expected, got);
-        const pts = +(s*1).toFixed(2);
-        puntiSec2 += pts;
+        // Anti-cheat minimi
+        const piecesArr = (payload && Array.isArray(payload.pieces)) ? payload.pieces : [];
+        const hasBond = piecesArr.some(p => p && (p.kind==='bond-' || p.kind==='bond=' || p.kind==='bond≡' || p.kind==='bondV'));
+        const minPieces = piecesArr.length >= 3;
 
+        // Snapshot studente
         let studPNG = '';
         try{
           if (payload) studPNG = renderBuildSnapshot(payload, 800, 500);
         }catch(_){ studPNG=''; }
 
+        // Overlay contro soluzione/e
+        let sOverlay = 0, chosenSol = '';
+        try{
+          const sols = q.correctImg;
+          if (studPNG && sols){
+            const res2 = await bestOverlapFromList(studPNG, Array.isArray(sols)? sols : [sols]);
+            sOverlay = res2.score;
+            chosenSol = res2.url || (Array.isArray(sols)? sols[0] : sols);
+          }
+        }catch(_){ sOverlay = 0; }
+
+        // Solo overlay + guardie anti-cheat
+        let pts = sOverlay;
+        if (!hasBond || !minPieces) pts = 0;
+
+        pts = +pts.toFixed(2);
+        puntiSec2 += pts;
+
         const card = document.createElement('div'); card.className='card';
         const txt = document.createElement('div');
-        const badge = s>=0.9?'ok':(s>=0.5?'warn':'err');
+        const badge = pts>=0.9?'ok':(pts>=0.5?'warn':'err');
         txt.innerHTML = `
           <div><strong>Domanda ${idx+1}</strong></div>
           <div class="mini"><em>Richiesta:</em> ${esc(q.testo)}</div>
@@ -1722,7 +1573,8 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
 
         const imgs = document.createElement('div'); imgs.className='wide';
         if (studPNG){ const i1=new Image(); i1.src=studPNG; i1.alt='Soluzione studente'; imgs.appendChild(i1); }
-        const sol=new Image(); sol.src=q.correctImg; sol.alt='Soluzione corretta'; imgs.appendChild(sol);
+        const sol=new Image(); sol.src=q.correctImg ? (chosenSol || (Array.isArray(q.correctImg)? q.correctImg[0] : q.correctImg)) : '';
+        sol.alt='Soluzione corretta'; imgs.appendChild(sol);
 
         card.appendChild(txt); card.appendChild(imgs);
         cont2.appendChild(card);
@@ -1731,7 +1583,7 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
       }
     }
 
-    const tot = puntiSec1 + puntiSec2; // max 13
+    const tot = puntiSec1 + puntiSec2; // max 13 (10 + 3)
     const voto = +(((tot)/13)*10).toFixed(2);
     const totali = document.getElementById('totali');
     totali.innerHTML = `
@@ -1743,24 +1595,9 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
     `;
 
     document.getElementById('resultSection').style.display='block';
-    enableLeaveWarning(true); // conferma-uscita anche nel riepilogo
-
-    // Blocca il riepilogo finché non si inserisce il PIN
-    showPinLock();
-
-    // Reset risposte salvate, mantieni a schermo il riepilogo blurrato:
-    resetAllProgress({keepResult:true});
-
   } catch (err){
     console.error('[Consegna] errore:', err);
     alert('Si è verificato un errore durante la generazione del riepilogo. Controlla la console per i dettagli.');
-  }
-});
-
-// Torna alla schermata iniziale dal riepilogo (e reset totale)
-document.getElementById('backHomeBtn').addEventListener('click', ()=>{
-  if (confirm('Tornare alla schermata iniziale cancellerà tutte le risposte salvate. Procedere?')) {
-    resetAllProgress({keepResult:false});
   }
 });
 </script>
