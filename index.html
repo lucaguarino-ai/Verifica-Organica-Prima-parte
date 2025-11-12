@@ -79,8 +79,9 @@
 
   /* PIN overlay */
   #pinOverlay{
-    position:fixed; inset:0; background:rgba(255,255,255,0.98);
-    backdrop-filter: blur(6px);
+    position:fixed; inset:0;
+    background:rgba(255,255,255,0.98); /* più opaco */
+    backdrop-filter: blur(6px);        /* blur più forte */
     display:none; align-items:center; justify-content:center; z-index:9999;
   }
   #pinBox{
@@ -90,7 +91,7 @@
   #pinBox h3{ margin:0 0 8px; }
   #pinErr{ color:#c62828; min-height:18px; font-size:13px; }
 
-  /* Firma digitale */
+  /* Firma digitale (singola) */
   .lg-sign{
     width:100%;
     text-align:center;
@@ -252,6 +253,9 @@
   </div>
 </div>
 
+<!-- Firma digitale (una sola) -->
+<div class="lg-sign">by LG</div>
+
 <script>
 /* ====== CONFIG ====== */
 const PIN_CODE = 5822; // <<< cambia qui il PIN se vuoi
@@ -325,7 +329,7 @@ const correctNames={
   "diene.jpg":"trans 3 Cl-4 etil-3 eptene",
   "benzene.jpg":"4 Br-2 Cl-1 etilcicloesano"
 };
-/* Soluzioni docente: supporto varianti */
+/* Soluzioni docente (possono essere più varianti) */
 const correctImagesAnnota = {
   "alcano.jpg":  ["alcano_A_corretto.png","alcano_B_corretto.png"],
   "alchene.jpg": ["alchene_corretto.png"],
@@ -557,7 +561,7 @@ nums1.addEventListener('mousemove',e=>{
 </script>
 
 <script>
-/* ===== Sezione 2: Costruzione con SNAP/AGGANCIO ripristinato ===== */
+/* ===== Sezione 2: Costruzione con SNAP/AGGANCIO ===== */
 (() => {
   const costruCanvas = document.getElementById('costruCanvas');
   const costruCursor = document.getElementById('costruCursor');
@@ -584,8 +588,8 @@ nums1.addEventListener('mousemove',e=>{
 
   const questions = [
     {testo:"Costruisci: 3,3-dibromo-1,1,5,5-tetracloropentano",correctImg:["costruzione_1_corretto.png"]},
-    {testo:"Costruisci: 1-cloro-4,4-dimetil-2-esino",correctImg:["costruzione_2_corretto_A.png","costruzione_2_corretto_B.png"]},
-    {testo:"Costruisci: 1-bromo-3-etil-4-metil-3-esene",correctImg:["costruzione_3_corretto_A.png","costruzione_3_corretto_B.png"]}
+    {testo:"Costruisci: 1-cloro-4,4-dimetil-2-esino",correctImg:["costruzione_2_corretto.png"]},
+    {testo:"Costruisci: 1-bromo-3-etil-4-metil-3-esene",correctImg:["costruzione_3_corretto.png"]}
   ];
   let qIndex=0;
   const domandaText=document.getElementById('domandaText');
@@ -600,7 +604,7 @@ nums1.addEventListener('mousemove',e=>{
 
   const ATOM_COLOR='#000';
   const FONT='20px Arial';
-  const SNAP_DIST = 6;      // raggio snap più generoso
+  const SNAP_DIST = 6;
   const SOFT_SNAP_DIST = 10;
   const BOND_LEN = 26;
   const DIRS=['N','S','E','W','A1','A2','A3','A4','A5','A6','EQ1','EQ2','EQ3','EQ4','EQ5','EQ6'];
@@ -750,30 +754,6 @@ nums1.addEventListener('mousemove',e=>{
   function translateGroup(gid,dx,dy){ pieces.forEach(p=>{ if(p.groupId===gid){ p.x+=dx; p.y+=dy; }}); }
   function isComplement(a,b){ return (a==='male'&&b==='female')||(a==='female'&&b==='male'); }
 
-  function portPairs(ownerA, ownerB){
-    const A = getPorts(ownerA), B = getPorts(ownerB);
-    const out = [];
-    for (const ka in A){
-      if (ownerA.engaged[ka]) continue;
-      const typeA = ownerA.connectors?.[ka] || 'none';
-      if (typeA==='none') continue;
-      for (const kb in B){
-        if (ownerB.engaged[kb]) continue;
-        const typeB = ownerB.connectors?.[kb] || 'none';
-        if (typeB==='none') continue;
-        if (isComplement(typeA,typeB)) out.push({aKey:ka, aPt:A[ka], bKey:kb, bPt:B[kb]});
-      }
-    }
-    return out;
-  }
-  function effectiveSnapRadius(a, b){
-    const bondish = isBond(a) || isBond(b);
-    const rotated = (isBond(a) && (a.angle||0)%360 !== 0) || (isBond(b) && (b.angle||0)%360 !== 0);
-    const boatish = (a.kind==='boat' || b.kind==='boat');
-    if (rotated) return Math.max(SOFT_SNAP_DIST, 10);
-    return (bondish || boatish) ? SOFT_SNAP_DIST : SNAP_DIST;
-  }
-
   let snapEffects = [];
   let animating = false;
   function addSnapEffect(x,y){ snapEffects.push({x,y,start:performance.now()}); if(!animating){ animating=true; requestAnimationFrame(tick);} }
@@ -792,7 +772,7 @@ nums1.addEventListener('mousemove',e=>{
         if (!c || !ids.has(c.peerId)){ P.connections[s]=null; P.engaged[s]=false; }
       }
     }
-    // Simmetrizza
+    // Simmetrizza e verifica complementarità
     for (const P of pieces){
       for (const s of DIRS){
         const c = P.connections?.[s];
@@ -821,39 +801,38 @@ nums1.addEventListener('mousemove',e=>{
     if(isBond(a) && a.angle) ctx.rotate(a.angle*Math.PI/180);
     ctx.translate(-a.w/2,-a.h/2);
     if (a.kind!=='boat'){ ctx.fillStyle='#fff'; ctx.fillRect(0,0,a.w,a.h); }
-    ctx.fillStyle=ATOM_COLOR; ctx.strokeStyle=ATOM_COLOR; ctx.lineWidth=2; ctx.textBaseline='middle'; ctx.font=FONT;
+    ctx.fillStyle='#000'; ctx.strokeStyle='#000'; ctx.lineWidth=2; ctx.textBaseline='middle'; ctx.font='20px Arial';
     if (a.kind==='boat'){
-      const vs=boatVertices({x:0,y:0,w:a.w,h:a.h});
+      const vs=(function(a){const x=0,y=0;return[{x:x+40,y:y+135},{x:x+140,y:y+60},{x:x+260,y:y+95},{x:x+395,y:y+180},{x:x+300,y:y+235},{x:x+170,y:y+205}];})(a);
       ctx.beginPath(); ctx.moveTo(vs[0].x,vs[0].y); for(let k=1;k<vs.length;k++) ctx.lineTo(vs[k].x,vs[k].y); ctx.closePath(); ctx.stroke();
     }else{
-      const lab=labelOf(a.kind); const tw=ctx.measureText(lab).width;
+      const lab=(a.kind==='bond-'?'—':a.kind==='bond='?'=':a.kind==='bond≡'?'≡':a.kind==='bondV'?'|':a.kind==='CH2'?'CH₂':a.kind==='CH3'?'CH₃':a.kind);
+      const tw=ctx.measureText(lab).width;
       ctx.fillText(lab,(a.w-tw)/2,a.h/2);
     }
     ctx.restore();
-    if (showPorts) drawPorts(a);
-  }
-  function drawPorts(a){
-    const ports=getPorts(a);
-    for (const side in ports){
-      const t=a.connectors?.[side]||'none'; if (t==='none') continue;
-      const pt=ports[side]; const engaged=!!a.engaged[side];
-      ctx.save(); ctx.lineWidth=2;
-      if (t==='female'){
-        ctx.beginPath(); ctx.arc(pt.x,pt.y,4,0,Math.PI*2);
-        engaged ? (ctx.fillStyle='rgba(56,142,60,.8)', ctx.fill()) : (ctx.strokeStyle='rgba(56,142,60,.9)', ctx.stroke());
-      }else{
-        const r=4;
-        engaged ? (ctx.fillStyle='rgba(56,142,60,.8)', ctx.fillRect(pt.x-r,pt.y-r,r*2,r*2))
-                : (ctx.strokeStyle='rgba(56,142,60,.9)', ctx.strokeRect(pt.x-r,pt.y-r,r*2,r*2));
+    if (showPorts){
+      const ports=getPorts(a);
+      for (const side in ports){
+        const t=a.connectors?.[side]||'none'; if (t==='none') continue;
+        const pt=ports[side]; const engaged=!!a.engaged[side];
+        ctx.save(); ctx.lineWidth=2;
+        if (t==='female'){
+          ctx.beginPath(); ctx.arc(pt.x,pt.y,4,0,Math.PI*2);
+          engaged ? (ctx.fillStyle='rgba(56,142,60,.8)', ctx.fill()) : (ctx.strokeStyle='rgba(56,142,60,.9)', ctx.stroke());
+        }else{
+          const r=4;
+          engaged ? (ctx.fillStyle='rgba(56,142,60,.8)', ctx.fillRect(pt.x-r,pt.y-r,r*2,r*2))
+                  : (ctx.strokeStyle='rgba(56,142,60,.9)', ctx.strokeRect(pt.x-r,pt.y-r,r*2,r*2));
+        }
+        ctx.restore();
       }
-      ctx.restore();
     }
   }
 
   function draw(ts){
     ctx.clearRect(0,0,costruCanvas.width,costruCanvas.height);
     pieces.forEach(p=>drawPiece(p));
-
     ctx.fillStyle='#2e7d32';
     ctx.font='bold 16px Arial';
     numbers2.forEach(n => { ctx.fillText(n.text, n.x-4, n.y+6); });
@@ -1071,7 +1050,6 @@ nums1.addEventListener('mousemove',e=>{
     const nx=x-drag.ox, ny=y-drag.oy;
     const dx=nx-A.x, dy=ny-A.y;
 
-    // trascina il gruppo connesso (se presente) altrimenti solo l'oggetto
     const hasConnStrict = Object.values(A.connections||{}).some(c => c && findIndexById(c.peerId) >= 0);
     if (hasConnStrict){
       const compIds = connectedComponentForPiece(A).map(p=>p.id);
@@ -1180,7 +1158,7 @@ nums1.addEventListener('mousemove',e=>{
 
   setQuestion(0);
 
-  /* ===== SNAP/AGGANCIO: collega la porta più vicina compatibile ===== */
+  /* ===== SNAP/AGGANCIO ===== */
   function connectedComponentForPiece(A){
     const comp = [];
     const visited = new Set();
@@ -1204,7 +1182,6 @@ nums1.addEventListener('mousemove',e=>{
     const members = groupMembers(gid);
     let best = null;
 
-    // trova la miglior coppia di porte compatibili fra il gruppo e gli altri pezzi
     for (const A of members){
       const portsA = getPorts(A);
       for (const B of pieces){
@@ -1222,7 +1199,13 @@ nums1.addEventListener('mousemove',e=>{
 
             const aPt = portsA[aKey], bPt = portsB[bKey];
             const d = Math.hypot(aPt.x - bPt.x, aPt.y - bPt.y);
-            const R = effectiveSnapRadius(A,B);
+            const R = (function(a,b){
+              const bondish = isBond(a) || isBond(b);
+              const rotated = (isBond(a) && (a.angle||0)%360 !== 0) || (isBond(b) && (b.angle||0)%360 !== 0);
+              const boatish = (a.kind==='boat' || b.kind==='boat');
+              if (rotated) return Math.max(10, 10);
+              return (bondish || boatish) ? 10 : 6;
+            })(A,B);
             if (d <= R){
               if (!best || d < best.d) best = {A,aKey,aPt,B,bKey,bPt,d};
             }
@@ -1233,12 +1216,10 @@ nums1.addEventListener('mousemove',e=>{
 
     if (!best) return;
 
-    // trasla l'intero gruppo in modo che le due porte coincidano
     const dx = best.bPt.x - best.aPt.x;
     const dy = best.bPt.y - best.aPt.y;
     translateGroup(gid, dx, dy);
 
-    // collega simmetricamente
     best.A.connections[best.aKey] = {peerId: best.B.id, peerSide: best.bKey};
     best.B.connections[best.bKey] = {peerId: best.A.id, peerSide: best.aKey};
     best.A.engaged[best.aKey] = true;
@@ -1341,50 +1322,8 @@ async function bestOverlapFromList(studentDataUrl, teacherUrls){
 </script>
 
 <script>
-/* ===== PNG compositi ===== */
+/* ===== PNG per DISPLAY e PNG con SOLO tratti+numeri (Sez.1) ===== */
 function compositeStudentImage(file){
-function studentOverlayOnlyPNG(file){
-  // PNG trasparente con SOLO strokes + numeri (senza immagine di base)
-  return new Promise(resolve=>{
-    try{
-      const savedRaw = localStorage.getItem('annota_'+file);
-      const saved = savedRaw ? JSON.parse(savedRaw) : null;
-      if(!saved){ resolve(''); return; }
-
-      const hasStrokes = !!(saved.strokes);
-      const hasNums = Array.isArray(saved.numbers) && saved.numbers.length>0;
-      if(!hasStrokes && !hasNums){ resolve(''); return; }
-
-      // ricavo dimensioni dal file di base (uguali ai layer)
-      const img = new Image();
-      img.onload=()=>{
-        const c=document.createElement('canvas');
-        c.width=img.width; c.height=img.height;
-        const t=c.getContext('2d');
-
-        if (hasStrokes){
-          const s=new Image();
-          s.onload=()=>{
-            t.drawImage(s,0,0);
-            if(hasNums){
-              t.fillStyle='#2e7d32'; t.font='bold 16px Arial';
-              (saved.numbers||[]).forEach(n=>t.fillText(n.text,n.x-4,n.y+5));
-            }
-            resolve(c.toDataURL('image/png'));
-          };
-          s.src=saved.strokes;
-        } else {
-          // solo numeri
-          t.fillStyle='#2e7d32'; t.font='bold 16px Arial';
-          (saved.numbers||[]).forEach(n=>t.fillText(n.text,n.x-4,n.y+5));
-          resolve(c.toDataURL('image/png'));
-        }
-      };
-      img.onerror=()=>resolve('');
-      img.src=file;
-    }catch(_){ resolve(''); }
-  });
-}
   return new Promise(resolve=>{
     const savedRaw = localStorage.getItem('annota_'+file);
     const saved = savedRaw ? JSON.parse(savedRaw) : {};
@@ -1413,6 +1352,48 @@ function studentOverlayOnlyPNG(file){
     img.src=file;
   });
 }
+
+/* SOLO tratti+numeri per scoring Sez.1 (senza base) */
+function studentOverlayOnlyPNG(file){
+  return new Promise(resolve=>{
+    try{
+      const savedRaw = localStorage.getItem('annota_'+file);
+      const saved = savedRaw ? JSON.parse(savedRaw) : null;
+      if(!saved){ resolve(''); return; }
+
+      const hasStrokes = !!(saved.strokes);
+      const hasNums = Array.isArray(saved.numbers) && saved.numbers.length>0;
+      if(!hasStrokes && !hasNums){ resolve(''); return; }
+
+      const img = new Image();
+      img.onload=()=>{
+        const c=document.createElement('canvas');
+        c.width=img.width; c.height=img.height;
+        const t=c.getContext('2d');
+        if (hasStrokes){
+          const s=new Image();
+          s.onload=()=>{
+            t.drawImage(s,0,0);
+            if(hasNums){
+              t.fillStyle='#2e7d32'; t.font='bold 16px Arial';
+              (saved.numbers||[]).forEach(n=>t.fillText(n.text,n.x-4,n.y+5));
+            }
+            resolve(c.toDataURL('image/png'));
+          };
+          s.src=saved.strokes;
+        } else {
+          t.fillStyle='#2e7d32'; t.font='bold 16px Arial';
+          (saved.numbers||[]).forEach(n=>t.fillText(n.text,n.x-4,n.y+5));
+          resolve(c.toDataURL('image/png'));
+        }
+      };
+      img.onerror=()=>resolve('');
+      img.src=file;
+    }catch(_){ resolve(''); }
+  });
+}
+
+/* Snapshot Sez.2 (pezzi + numeri) */
 function renderBuildSnapshot(payload, width=800, height=500){
   try{
     const c=document.createElement('canvas'); c.width=width; c.height=height;
@@ -1429,9 +1410,14 @@ function renderBuildSnapshot(payload, width=800, height=500){
     }
     (payload?.pieces||[]).forEach(p=>{
       ctx.save();
-      ctx.fillStyle='#fff'; ctx.fillRect(p.x, p.y, p.w, p.h);
-      const lab=labelOf(p.kind); const tw=ctx.measureText(lab).width;
-      ctx.fillStyle='#000'; ctx.fillText(lab,(p.w-tw)/2 + p.x, p.h/2 + p.y);
+      if (p.kind==='boat'){
+        const vs=boatVertices(p);
+        ctx.beginPath(); ctx.moveTo(vs[0].x,vs[0].y); for(let k=1;k<vs.length;k++) ctx.lineTo(vs[k].x,vs[k].y); ctx.closePath(); ctx.strokeStyle='#000'; ctx.lineWidth=2; ctx.stroke();
+      } else {
+        ctx.fillStyle='#fff'; ctx.fillRect(p.x, p.y, p.w, p.h);
+        const lab=labelOf(p.kind); const tw=ctx.measureText(lab).width;
+        ctx.fillStyle='#000'; ctx.fillText(lab,(p.w-tw)/2 + p.x, p.h/2 + p.y);
+      }
       ctx.restore();
     });
     ctx.fillStyle='#2e7d32'; ctx.font='bold 16px Arial';
@@ -1442,21 +1428,22 @@ function renderBuildSnapshot(payload, width=800, height=500){
 </script>
 
 <script>
-/* ===== Valutazione & Riepilogo + consegna + PIN ===== */
+/* ===== Valutazione & Riepilogo + consegna + PIN + blur ===== */
 function editDistance(a,b){const dp=Array.from({length:b.length+1},(_,j)=>j);for(let i=1;i<=a.length;i++){let prev=i-1;dp[0]=i;for(let j=1;j<=b.length;j++){const tmp=dp[j];const cost=a[i-1]===b[j-1]?0:1;dp[j]=Math.min(dp[j]+1,dp[j-1]+1,prev+cost);prev=tmp;}}return dp[b.length];}
 function simFine(a,b){a=(a||'').toLowerCase().trim();b=(b||'').toLowerCase().trim();const L=Math.max(a.length,b.length);if(L===0)return 1;const ed=editDistance(a,b);const s=(L-ed)/L;if(s>=0.90)return 1.0;if(s>=0.75)return 0.75;if(s>=0.50)return 0.50;if(s>=0.25)return 0.25;return 0.0;}
 
 const pinOverlay = document.getElementById('pinOverlay');
 const pinInput = document.getElementById('pinInput');
 const pinErr   = document.getElementById('pinErr');
+
 document.getElementById('pinOk').addEventListener('click', ()=>{
   const val = Number((pinInput.value||'').trim());
   if (val === PIN_CODE){
     summaryUnlocked = true;
     pinOverlay.style.display='none';
     const rs = document.getElementById('resultSection');
-          rs.style.filter='none';
-          rs.style.pointerEvents='auto';
+    rs.style.filter='none';
+    rs.style.pointerEvents='auto';
   } else {
     pinErr.textContent = 'PIN errato.';
   }
@@ -1469,6 +1456,8 @@ document.getElementById('printBtn').addEventListener('click', ()=>{
   if (!summaryUnlocked){
     alert('Inserisci il PIN per sbloccare il riepilogo.');
     pinOverlay.style.display='flex';
+    document.getElementById('resultSection').style.filter='blur(6px)';
+    document.getElementById('resultSection').style.pointerEvents='none';
     pinInput.focus();
     return;
   }
@@ -1515,25 +1504,25 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
         const sNLP = nlpSimilarity(userTxt, corr);
         const sText = Math.max(sED, sNLP);
 
+        // Valutazione visiva SOLO con tratti+numeri (no immagine base)
         const key = (window.answerKeys||{})[file];
-        // DOPO (valuta SOLO tratti+numeri; se non c'è nulla => 0)
         const studOverlay = await studentOverlayOnlyPNG(file).catch(()=> '');
         let sVis=0, chosenMask='';
         const hasContent = !!studOverlay;
 
         if (hasContent && key && key.masks){
-                     const res = await bestOverlapFromList(studOverlay, key.masks);
-                     sVis = res.score;
-                     chosenMask = res.url || (Array.isArray(key.masks) ? key.masks[0] : key.masks);
-                  } else {
-                     sVis = 0; // nessun tratto/numero => 0
-                  }
-
-                   // per VISUALIZZARE nella card usiamo ancora l'immagine composita (base+strokes+numeri)
-        const studImg = await compositeStudentImage(file).catch(()=> '');
+          const res = await bestOverlapFromList(studOverlay, key.masks);
+          sVis = res.score;
+          chosenMask = res.url || (Array.isArray(key.masks) ? key.masks[0] : key.masks);
+        } else {
+          sVis = 0; // senza linee/numero -> 0
+        }
 
         const pts = +((sText*(window.W_TEXT||1) + sVis*(window.W_VIS||1))).toFixed(2);
         puntiSec1 += pts;
+
+        // Per la visualizzazione manteniamo la versione con base+strokes+numeri
+        const studImg = await compositeStudentImage(file).catch(()=> '');
 
         const card = document.createElement('div'); card.className='card';
         const txt = document.createElement('div');
@@ -1578,8 +1567,8 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
 
     const questions=[
       {testo:"Costruisci: 3,3-dibromo-1,1,5,5-tetracloropentano", correctImg:["costruzione_1_corretto.png"]},
-      {testo:"Costruisci: 1-cloro-4,4-dimetil-2-esino",            correctImg:["costruzione_2_corretto_A.png","costruzione_2_corretto_B.png"]},
-      {testo:"Costruisci: 1-bromo-3-etil-4-metil-3-esene",         correctImg:["costruzione_3_corretto_A.png","costruzione_3_corretto_B.png"]}
+      {testo:"Costruisci: 1-cloro-4,4-dimetil-2-esino",            correctImg:["costruzione_2_corretto.png"]},
+      {testo:"Costruisci: 1-bromo-3-etil-4-metil-3-esene",         correctImg:["costruzione_3_corretto.png"]}
     ];
 
     for (let idx=0; idx<questions.length; idx++){
@@ -1590,11 +1579,10 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
         try{ payload = raw ? JSON.parse(raw) : null; }catch(_){ payload=null; }
 
         const piecesArr = (payload && Array.isArray(payload.pieces)) ? payload.pieces : [];
-        const payload = raw ? JSON.parse(raw) : null;
-        const piecesArr = (payload && Array.isArray(payload.pieces))  ? payload.pieces  : [];
-        const numsArr   = (payload && Array.isArray(payload.numbers2))? payload.numbers2: [];
+        const numsArr   = (payload && Array.isArray(payload.numbers2)) ? payload.numbers2 : [];
         const hasAnyContent = (piecesArr.length > 0) || (numsArr.length > 0);
 
+        // snapshot (pezzi + numeri)
         let studPNG = '';
         try{ if (payload) studPNG = renderBuildSnapshot(payload, 800, 500); }catch(_){ studPNG=''; }
 
@@ -1608,7 +1596,7 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
           }
         }catch(_){ sOverlay = 0; }
 
-        let pts = hasAnyContent ? sOverlay : 0; // se canvas completamente vuoto => 0
+        let pts = hasAnyContent ? sOverlay : 0;
         pts = +pts.toFixed(2);
         puntiSec2 += pts;
 
@@ -1623,12 +1611,8 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
 
         const imgs = document.createElement('div'); imgs.className='wide';
         if (studPNG){ const i1=new Image(); i1.src=studPNG; i1.alt='Soluzione studente'; imgs.appendChild(i1); }
-        const sol=new Image(); 
-        sol.src=q.correctImg 
-          ? (chosenSol || (Array.isArray(q.correctImg)? q.correctImg[0] : q.correctImg)) 
-          : '';
-        sol.alt='Soluzione corretta'; 
-        imgs.appendChild(sol);
+        const sol=new Image(); sol.src=q.correctImg ? (chosenSol || (Array.isArray(q.correctImg)? q.correctImg[0] : q.correctImg)) : '';
+        sol.alt='Soluzione corretta'; imgs.appendChild(sol);
 
         card.appendChild(txt); card.appendChild(imgs);
         cont2.appendChild(card);
@@ -1650,12 +1634,13 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
 
     document.getElementById('resultSection').style.display='block';
 
-    // Mostra overlay PIN e blocca interazioni finché non sbloccato
+    // Mostra overlay PIN, applica blur e blocca interazioni sul riepilogo
     pinErr.textContent = '';
     pinInput.value = '';
     pinOverlay.style.display='flex';
-    document.getElementById('resultSection').style.filter='blur(6px)';
-    document.getElementById('resultSection').style.pointerEvents='none';
+    const rs = document.getElementById('resultSection');
+    rs.style.filter='blur(6px)';
+    rs.style.pointerEvents='none';
     pinInput.focus();
 
   } catch (err){
@@ -1665,7 +1650,5 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
 });
 </script>
 
-<!-- Firma digitale -->
-<div class="lg-sign">by LG</div>
 </body>
 </html>
