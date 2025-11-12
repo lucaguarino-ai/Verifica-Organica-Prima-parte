@@ -80,8 +80,8 @@
   /* PIN overlay */
   #pinOverlay{
     position:fixed; inset:0;
-    background:rgba(255,255,255,0.98); /* più opaco */
-    backdrop-filter: blur(6px);        /* blur più forte */
+    background:rgba(255,255,255,0.98);
+    backdrop-filter: blur(6px);
     display:none; align-items:center; justify-content:center; z-index:9999;
   }
   #pinBox{
@@ -105,9 +105,7 @@
   @media print{
     body{ background:#fff; }
     .section{ border:none; box-shadow:none; }
-    /* Mostra firma in stampa */
     .lg-sign{ display:block !important; position:static; }
-    /* Impedisci stampa se non sbloccato (overlay visibile) */
     #pinOverlay{ display:none !important; }
   }
 </style>
@@ -237,7 +235,10 @@
   <h4>Sezione 1 – Annotazione</h4><div id="riepilogoAnnota"></div>
   <h4>Sezione 2 – Costruzione</h4><div id="riepilogoCostru"></div>
   <h4>Totale</h4><div id="totali"></div>
-  <div class="space-between"><span></span><button id="printBtn">📄 Esporta PDF</button></div>
+  <div class="space-between">
+    <button id="homeBtn">🏠 Torna all’inizio (azzera tutto)</button>
+    <button id="printBtn">📄 Esporta PDF</button>
+  </div>
 </div>
 
 <!-- PIN Overlay -->
@@ -258,7 +259,7 @@
 
 <script>
 /* ====== CONFIG ====== */
-const PIN_CODE = 5822; // <<< cambia qui il PIN se vuoi
+const PIN_CODE = 5822; // <<< cambia qui il PIN
 
 /* ===== Utility ===== */
 function esc(s){return (s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
@@ -276,9 +277,12 @@ function nlpSimilarity(a,b){
 }
 
 /* ===== Data e orari ===== */
-const today = new Date();
-const dataEl=document.getElementById('data');
-if(dataEl) dataEl.value = today.toLocaleDateString('it-IT',{year:'numeric',month:'2-digit',day:'2-digit'});
+function setToday(){
+  const d=new Date();
+  const dataEl=document.getElementById('data');
+  if(dataEl) dataEl.value = d.toLocaleDateString('it-IT',{year:'numeric',month:'2-digit',day:'2-digit'});
+}
+setToday();
 let startTime=null,endTime=null,timerInt=null;
 const studentInfoBar=document.getElementById('studentInfoBar');
 const fmtTime=d=>d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
@@ -295,6 +299,38 @@ window.addEventListener('beforeunload', (e)=>{
   }
 });
 
+/* ===== Reset totale e ritorno all’inizio ===== */
+function clearAllWork(){
+  const toDel=[];
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(k && (k.startsWith('annota_') || k.startsWith('build_q_'))) toDel.push(k);
+  }
+  toDel.forEach(k=>localStorage.removeItem(k));
+}
+function goHome(){
+  // azzera storage parziale della verifica
+  clearAllWork();
+
+  // ripristina UI iniziale
+  document.getElementById('studentSection').style.display='block';
+  document.getElementById('sezione1').style.display='none';
+  document.getElementById('sezione2').style.display='none';
+  document.getElementById('resultSection').style.display='none';
+  studentInfoBar.style.display='none';
+
+  // reset campi
+  ['nome','cognome','classe'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  setToday();
+  if (timerInt){ clearInterval(timerInt); timerInt=null; }
+
+  // stati
+  examActive=false; summaryActive=false; summaryUnlocked=false;
+  // rimuovi eventuale blur
+  const rs = document.getElementById('resultSection');
+  rs.style.filter='none'; rs.style.pointerEvents='auto';
+}
+
 /* ===== Avvio verifica ===== */
 document.getElementById('iniziaBtn').addEventListener('click', ()=>{
   const nome=document.getElementById('nome').value.trim();
@@ -303,7 +339,7 @@ document.getElementById('iniziaBtn').addEventListener('click', ()=>{
   if(!nome||!cognome||!classe){alert('Compila Nome, Cognome e Classe.');return;}
   startTime=new Date();
 
-  studentInfoBar.innerHTML=`Studente: <strong>${esc(nome)} ${esc(cognome)}</strong> — Classe: ${esc(classe)} — Data: ${dataEl.value} — Inizio: ${fmtTime(startTime)} — <span id="liveTimer">Tempo trascorso: 00:00:00</span>`;
+  studentInfoBar.innerHTML=`Studente: <strong>${esc(nome)} ${esc(cognome)}</strong> — Classe: ${esc(classe)} — Data: ${document.getElementById('data').value} — Inizio: ${fmtTime(startTime)} — <span id="liveTimer">Tempo trascorso: 00:00:00</span>`;
   studentInfoBar.style.display='block';
 
   const liveTimer=document.getElementById('liveTimer');
@@ -329,7 +365,6 @@ const correctNames={
   "diene.jpg":"trans 3 Cl-4 etil-3 eptene",
   "benzene.jpg":"4 Br-2 Cl-1 etilcicloesano"
 };
-/* Soluzioni docente (possono essere più varianti) */
 const correctImagesAnnota = {
   "alcano.jpg":  ["alcano_A_corretto.png","alcano_B_corretto.png"],
   "alchene.jpg": ["alchene_corretto.png"],
@@ -338,11 +373,11 @@ const correctImagesAnnota = {
   "benzene.jpg": ["benzene_corretto.png"]
 };
 
-/* Pesi/chiavi globali per il riepilogo */
-window.W_TEXT   = 1.0;  // Sez.1: testo
-window.W_VIS    = 1.0;  // Sez.1: overlay (strokes+numeri)
-window.W_STRUCT = 0.0;  // Sez.2: disattivato
-window.W_OVERLAY= 1.0;  // Sez.2: solo overlay
+/* Pesi globali */
+window.W_TEXT   = 1.0;
+window.W_VIS    = 1.0;
+window.W_STRUCT = 0.0;
+window.W_OVERLAY= 1.0;
 
 /* Answer keys -> masks (array/stringa) */
 window.answerKeys = {
@@ -440,7 +475,7 @@ function applyLoadedState(state){
   draggingNum=null; drawing1=false; erasing1=false;
   sctx.clearRect(0,0,strokes1.width,strokes1.height);
   nctx.clearRect(0,0,nums1.width,nums1.height);
-  cctx.clearRect(0,0,cursor1.width,cursor1.height);
+  cctx.clearRect(0,0,cursor1.width,0);
   nomeInput.value = state.text || '';
   if(state.strokes){
     const si=new Image(); si.onload=()=>sctx.drawImage(si,0,0); si.src=state.strokes;
@@ -461,7 +496,7 @@ document.querySelectorAll('#numsToolbar1 .numBtn').forEach(btn=>{
 
 function resizeStage(w,h){
   stage1.style.width=w+'px'; stage1.style.height=h+'px';
-  ;[bg1,strokes1,nums1,cursor1].forEach(c=>{c.width=w; c.height=h;});
+  [bg1,strokes1,nums1,cursor1].forEach(c=>{c.width=w; c.height=h;});
   nomeInput.style.width=w+'px';
 }
 
@@ -561,7 +596,7 @@ nums1.addEventListener('mousemove',e=>{
 </script>
 
 <script>
-/* ===== Sezione 2: Costruzione con SNAP/AGGANCIO (fix drag+snap+reload) ===== */
+/* ===== Sezione 2: Costruzione con SNAP/AGGANCIO (fix: revive connections) ===== */
 (() => {
   const costruCanvas = document.getElementById('costruCanvas');
   const costruCursor = document.getElementById('costruCursor');
@@ -572,12 +607,12 @@ nums1.addEventListener('mousemove',e=>{
 
   let pieces = [];
   let numbers2 = [];
-  let drag = null;          // { anchor:pieceRef, ox, oy, comp:Set(ids) }
   let dragNum2 = null;
+  let nextId = 1, nextGroupId = 1;
+  let drag = null;
   let selected = null;
   let eraser = false, erasingHeld = false;
   let showPorts = false;
-  let nextId = 1, nextGroupId = 1;
 
   const SPAWN = {
     'C':   {x:  20, y:  36}, 'H':   {x:  80, y:  36}, 'F':   {x: 140, y:  36}, 'Cl':  {x: 200, y:  36},
@@ -602,6 +637,11 @@ nums1.addEventListener('mousemove',e=>{
   }
   function keyQ(i){ return 'build_q_'+i; }
 
+  const ATOM_COLOR='#000';
+  const FONT='20px Arial';
+  const SNAP_DIST = 6;
+  const SOFT_SNAP_DIST = 10;
+  const BOND_LEN = 26;
   const DIRS=['N','S','E','W','A1','A2','A3','A4','A5','A6','EQ1','EQ2','EQ3','EQ4','EQ5','EQ6'];
   const isBond = (p)=> p && (p.kind==='bond-' || p.kind==='bond=' || p.kind==='bond≡' || p.kind==='bondV');
 
@@ -617,15 +657,23 @@ nums1.addEventListener('mousemove',e=>{
   function emptyPorts(){ const o={}; DIRS.forEach(d=>o[d]='none'); return o; }
 
   function measurePiece(p){
-    ctx.font='20px Arial';
+    ctx.font=FONT;
     if (p.kind==='boat') return {w: 520, h: 360};
     const lab=labelOf(p.kind);
     const isBondKind = (p.kind==='bond-' || p.kind==='bond=' || p.kind==='bond≡' || p.kind==='bondV');
     const padX = isBondKind ? 1 : 4;
     const padY = isBondKind ? 4 : 6;
 
-    if (p.kind==='bondV'){ return { w: Math.max(14, ctx.measureText(lab).width + padX*2), h: 26 }; }
-    if (p.kind==='bond-' || p.kind==='bond=' || p.kind==='bond≡'){ return { w: 26, h: Math.max(22, 20 + padY*2) }; }
+    if (p.kind==='bondV'){
+      const w = Math.max(14, ctx.measureText(lab).width + padX*2);
+      const h = BOND_LEN;
+      return { w, h };
+    }
+    if (p.kind==='bond-' || p.kind==='bond=' || p.kind==='bond≡'){
+      const w = BOND_LEN;
+      const h = Math.max(22, 20 + padY*2);
+      return { w, h };
+    }
     const w=ctx.measureText(lab).width + padX*2;
     const h=20 + padY*2;
     return {w: Math.max(22, w), h: Math.max(22, h)};
@@ -678,17 +726,20 @@ nums1.addEventListener('mousemove',e=>{
 
   function boatVertices(a){
     const x=a.x, y=a.y;
-    return [
-      {x:x+40,  y:y+135},{x:x+140, y:y+60},{x:x+260, y:y+95},
-      {x:x+395, y:y+180},{x:x+300, y:y+235},{x:x+170, y:y+205}
-    ];
+    const v1={x:x+40,  y:y+135}, v2={x:x+140, y:y+60}, v3={x:x+260, y:y+95},
+          v4={x:x+395, y:y+180}, v5={x:x+300, y:y+235}, v6={x:x+170, y:y+205};
+    return [v1,v2,v3,v4,v5,v6];
   }
   function boatPorts(a){
-    const vs=boatVertices(a), off=5;
-    const A=[ {x:vs[0].x, y:vs[0].y+off},{x:vs[1].x, y:vs[1].y-off},{x:vs[2].x, y:vs[2].y+off},
-              {x:vs[3].x, y:vs[3].y-off},{x:vs[4].x, y:vs[4].y+off},{x:vs[5].x, y:vs[5].y-off} ];
-    const EQ=[ {x:vs[0].x-off, y:vs[0].y+1},{x:vs[1].x-off, y:vs[1].y-1},{x:vs[2].x+off, y:vs[2].y},
-              {x:vs[3].x+off, y:vs[3].y+1},{x:vs[4].x+off, y:vs[4].y+1},{x:vs[5].x-off, y:vs[5].y+1} ];
+    const vs=boatVertices(a); const off=5;
+    const A = [
+      {x:vs[0].x, y:vs[0].y+off},{x:vs[1].x, y:vs[1].y-off},{x:vs[2].x, y:vs[2].y+off},
+      {x:vs[3].x, y:vs[3].y-off},{x:vs[4].x, y:vs[4].y+off},{x:vs[5].x, y:vs[5].y-off}
+    ];
+    const EQ = [
+      {x:vs[0].x-off, y:vs[0].y+1},{x:vs[1].x-off, y:vs[1].y-1},{x:vs[2].x+off, y:vs[2].y},
+      {x:vs[3].x+off, y:vs[3].y+1},{x:vs[4].x+off, y:vs[4].y+1},{x:vs[5].x-off, y:vs[5].y+1}
+    ];
     return {A,EQ};
   }
 
@@ -719,62 +770,54 @@ nums1.addEventListener('mousemove',e=>{
     return ports;
   }
 
+  function groupMembers(gid){ return pieces.filter(p=>p.groupId===gid); }
   function findIndexById(id){ return pieces.findIndex(p => p.id === id); }
 
-  /* === Componenti connesse & gruppi coerenti === */
   function connectedComponentForPiece(A){
-    const out = [];
-    const ids = new Set();
+    const comp = [];
+    const visited = new Set();
     const q = [A.id];
     while(q.length){
       const id = q.shift();
-      if (ids.has(id)) continue;
-      ids.add(id);
+      if (visited.has(id)) continue;
+      visited.add(id);
       const P = pieces.find(p=>p.id===id);
       if(!P) continue;
-      out.push(P);
+      comp.push(P);
       for (const k of DIRS){
         const c = P.connections?.[k];
-        if (c) q.push(c.peerId);
+        if (c && !visited.has(c.peerId)) q.push(c.peerId);
       }
     }
-    return out;
-  }
-  function rebuildGroups(){
-    nextGroupId++;
-    const seen = new Set();
-    for (const P of pieces){
-      if (seen.has(P.id)) continue;
-      const comp = connectedComponentForPiece(P);
-      const gid = nextGroupId++;
-      comp.forEach(Q => { Q.groupId = gid; seen.add(Q.id); });
-    }
+    return comp;
   }
 
-  /* === Sanificazione simmetrica + rebuild gruppi === */
+  function translateGroup(gid,dx,dy){
+    const members=groupMembers(gid);
+    members.forEach(p=>{ p.x+=dx; p.y+=dy; });
+  }
+
   function sanitizeGraph(){
-    const id2idx = new Map(pieces.map((p,i)=>[p.id,i]));
-    const isCompl = (a,b)=> (a==='male'&&b==='female')||(a==='female'&&b==='male');
-
-    // elimina link a nodi assenti
+    const ids = new Set(pieces.map(p=>p.id));
     for (const P of pieces){
       for (const s of DIRS){
         const c = P.connections?.[s] || null;
-        if (!c || !id2idx.has(c.peerId)){ P.connections[s]=null; P.engaged[s]=false; }
+        if (!c || !ids.has(c.peerId)){ P.connections[s]=null; P.engaged[s]=false; }
       }
     }
-    // simmetrizza & valida
+    // simmetrizza e controlla complementarità
     for (const P of pieces){
       for (const s of DIRS){
         const c = P.connections?.[s];
         if (!c) continue;
-        const j = id2idx.get(c.peerId);
-        if (j===undefined){ P.connections[s]=null; P.engaged[s]=false; continue; }
+        const j = findIndexById(c.peerId);
+        if (j<0){ P.connections[s]=null; P.engaged[s]=false; continue; }
         const Q = pieces[j];
         const back = Q.connections?.[c.peerSide];
         const tA = (P.connectors?.[s] || 'none');
         const tB = (Q.connectors?.[c.peerSide] || 'none');
-        if (!back || back.peerId !== P.id || !isCompl(tA,tB)){
+        const okCompl = (tA==='male'&&tB==='female')||(tA==='female'&&tB==='male');
+        if (!back || back.peerId!==P.id || !okCompl){
           P.connections[s]=null; P.engaged[s]=false;
           if (Q.connections && Q.engaged){ Q.connections[c.peerSide]=null; Q.engaged[c.peerSide]=false; }
         } else {
@@ -782,24 +825,25 @@ nums1.addEventListener('mousemove',e=>{
         }
       }
     }
-    rebuildGroups();
   }
 
-  /* === Disegno === */
   function drawPiece(a){
     ctx.save();
     const cx=a.x+a.w/2, cy=a.y+a.h/2;
-    ctx.translate(cx,cy); if(isBond(a) && a.angle) ctx.rotate(a.angle*Math.PI/180); ctx.translate(-a.w/2,-a.h/2);
+    ctx.translate(cx,cy);
+    if(isBond(a) && a.angle) ctx.rotate(a.angle*Math.PI/180);
+    ctx.translate(-a.w/2,-a.h/2);
     if (a.kind!=='boat'){ ctx.fillStyle='#fff'; ctx.fillRect(0,0,a.w,a.h); }
-    ctx.fillStyle='#000'; ctx.strokeStyle='#000'; ctx.lineWidth=2; ctx.textBaseline='middle'; ctx.font='20px Arial';
+    ctx.fillStyle=ATOM_COLOR; ctx.strokeStyle=ATOM_COLOR; ctx.lineWidth=2; ctx.textBaseline='middle'; ctx.font=FONT;
     if (a.kind==='boat'){
-      const vs=boatVertices(a);
+      const vs=(function(a){const x=0,y=0;return[{x:x+40,y:y+135},{x:x+140,y:y+60},{x:x+260,y:y+95},{x:x+395,y:y+180},{x:x+300,y:y+235},{x:x+170,y:y+205}];})(a);
       ctx.beginPath(); ctx.moveTo(vs[0].x,vs[0].y); for(let k=1;k<vs.length;k++) ctx.lineTo(vs[k].x,vs[k].y); ctx.closePath(); ctx.stroke();
     }else{
       const lab=labelOf(a.kind); const tw=ctx.measureText(lab).width;
       ctx.fillText(lab,(a.w-tw)/2,a.h/2);
     }
     ctx.restore();
+
     if (showPorts){
       const ports=getPorts(a);
       for (const side in ports){
@@ -819,10 +863,11 @@ nums1.addEventListener('mousemove',e=>{
     }
   }
 
-  function draw(){
+  function draw(ts){
     ctx.clearRect(0,0,costruCanvas.width,costruCanvas.height);
     pieces.forEach(p=>drawPiece(p));
-    ctx.fillStyle='#2e7d32'; ctx.font='bold 16px Arial';
+    ctx.fillStyle='#2e7d32';
+    ctx.font='bold 16px Arial';
     numbers2.forEach(n => { ctx.fillText(n.text, n.x-4, n.y+6); });
 
     cur.clearRect(0,0,costruCursor.width,costruCursor.height);
@@ -907,27 +952,46 @@ nums1.addEventListener('mousemove',e=>{
     const c=clone(none); c.N=c.S=c.E=c.W='female'; return c;
   }
 
-  // Ripristina anche connections/engaged dal payload
-  function revivePiece(raw){
-    const base = {
-      id: raw.id ?? (nextId++),
-      kind: raw.kind,
-      x: raw.x, y: raw.y, w: raw.w, h: raw.h,
-      angle: raw.angle||0, groupId: raw.groupId||nextGroupId++,
-      connectors: connectorsFor(raw.kind),
-      engaged: {}, connections: {}
-    };
-    DIRS.forEach(d=>{ base.engaged[d]=false; base.connections[d]=null; });
-    if (raw && raw.connections){
-      for (const k of DIRS){
-        const c = raw.connections[k];
-        if (c && c.peerId && c.peerSide){
-          base.connections[k] = {peerId: c.peerId, peerSide: c.peerSide};
-          base.engaged[k] = true; // verrà validato in sanitizeGraph()
+  // *** FIX PRINCIPALE: ripristina connections & engaged dal salvataggio ***
+  function revivePiecesWithConnections(rawPieces){
+    // prima crea tutti i pezzi (id, posizioni, connettori giusti)
+    const arr = rawPieces.map(p=>{
+      const base = {
+        id: p.id, kind: p.kind, x: p.x, y: p.y, w: p.w, h: p.h,
+        angle: p.angle||0, groupId: p.groupId||nextGroupId++,
+        connectors: connectorsFor(p.kind)
+      };
+      base.engaged = {}; base.connections = {};
+      DIRS.forEach(d=>{ base.engaged[d]=false; base.connections[d]=null; });
+      return base;
+    });
+    // mappa id->indice per ricostruire riferimenti
+    const id2idx = new Map(arr.map((p,i)=>[p.id,i]));
+    // ripristina collegamenti simmetrici dove validi
+    rawPieces.forEach((src,i)=>{
+      const dst = arr[i];
+      if (!src || !src.connections) return;
+      for (const side of DIRS){
+        const c = src.connections[side];
+        if (!c) continue;
+        const j = id2idx.get(c.peerId);
+        if (j===undefined) continue;
+        const peer = arr[j];
+        // assegna se compatibili e non già legati
+        const tA = dst.connectors?.[side] || 'none';
+        const tB = peer.connectors?.[c.peerSide] || 'none';
+        const ok = (tA==='male'&&tB==='female')||(tA==='female'&&tB==='male');
+        if (!ok) continue;
+        dst.connections[side] = {peerId: peer.id, peerSide: c.peerSide};
+        dst.engaged[side] = true;
+        // lato opposto
+        if (!peer.connections[c.peerSide]){
+          peer.connections[c.peerSide] = {peerId: dst.id, peerSide: side};
+          peer.engaged[c.peerSide] = true;
         }
       }
-    }
-    return base;
+    });
+    return arr;
   }
 
   function loadWorkForQuestion(){
@@ -939,41 +1003,42 @@ nums1.addEventListener('mousemove',e=>{
       try{
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)){
-          // legacy: lista simboli
+          // compat vecchio formato
           parsed.forEach(it => {
-            const sym = it.symbol;
-            let base;
-            if (['—','=','≡','|'].includes(sym)){
+            let p;
+            if (['—','=','≡','|'].includes(it.symbol)){
               const map = {'—':'bond-','=':'bond=','≡':'bond≡','|':'bondV'};
-              base = createBond(map[sym]);
+              p = createBond(map[it.symbol]);
             } else {
-              base = createStandard(sym);
+              p = createStandard(it.symbol);
             }
-            base.x = it.x || 40; base.y = it.y || 40;
-            pieces.push(base);
+            p.x = it.x || 40; p.y = it.y || 40;
+            pieces.push(p);
           });
         } else if (parsed){
           if (Array.isArray(parsed.pieces)){
-            pieces = parsed.pieces.map(p => revivePiece(p));
+            // *** qui: ripristino connections ***
+            pieces = revivePiecesWithConnections(parsed.pieces);
             let maxId=0, maxG=0; pieces.forEach(p=>{ if(p.id>maxId) maxId=p.id; if(p.groupId>maxG) maxG=p.groupId; });
             nextId=maxId+1; nextGroupId=maxG+1;
           }
-          if (Array.isArray(parsed.numbers2)) numbers2 = parsed.numbers2;
+          if (Array.isArray(parsed.numbers2)){
+            numbers2 = parsed.numbers2;
+          }
         }
       }catch(e){ /* ignore */ }
     }
-    sanitizeGraph(); // ripara e ricompone gruppi
+    sanitizeGraph(); // pulizia finale
     draw();
   }
 
   function bringToFront(i){ const p = pieces.splice(i,1)[0]; pieces.push(p); return pieces.length-1; }
   function selectAt(x,y){
     for (let i=pieces.length-1;i>=0;i--){
-      if (pieceHitTest(pieces[i],x,y)){ const t=bringToFront(i); selected=pieces[t]; draw(); return pieces[t]; }
+      if (pieceHitTest(pieces[i],x,y)){ const t=bringToFront(i); selected=pieces[t]; draw(); return t; }
     }
-    selected=null; draw(); return null;
+    selected=null; draw(); return -1;
   }
-
   function addByKind(kind){
     eraser=false; erasingHeld=false; cur.clearRect(0,0,costruCursor.width,costruCursor.height);
     document.getElementById('eraser2')?.classList.remove('danger');
@@ -981,10 +1046,9 @@ nums1.addEventListener('mousemove',e=>{
     if (kind==='boat') p=createBoat();
     else if (kind.startsWith('bond')) p=createBond(kind);
     else p=createStandard(kind);
-    pieces.push(p); selected=isBond(p)?p:null; sanitizeGraph(); draw(); saveWorkForQuestion();
+    pieces.push(p); selected=isBond(p)?p:null; draw(); saveWorkForQuestion();
   }
 
-  /* Toolbar */
   document.querySelectorAll('#tools2 .add2').forEach(btn=> btn.addEventListener('click',()=> addByKind(btn.dataset.kind)) );
   document.getElementById('addBoat2')?.addEventListener('click',()=> addByKind('boat'));
   document.getElementById('togglePorts2')?.addEventListener('click',()=>{ showPorts=!showPorts; draw(); });
@@ -1006,40 +1070,18 @@ nums1.addEventListener('mousemove',e=>{
     eraser=false; eraserBtn2.classList.remove('danger'); 
     if (selected && isBond(selected)){ 
       selected.angle=(selected.angle+15)%360; 
-      sanitizeGraph(); draw(); saveWorkForQuestion(); 
+      draw(); saveWorkForQuestion(); 
     } 
   });
   document.getElementById('rotCCW2')?.addEventListener('click',()=>{ 
     eraser=false; eraserBtn2.classList.remove('danger'); 
     if (selected && isBond(selected)){ 
       selected.angle=(selected.angle-15+360)%360; 
-      sanitizeGraph(); draw(); saveWorkForQuestion(); 
+      draw(); saveWorkForQuestion(); 
     } 
   });
 
-  /* Mouse/touch utils */
   function toCanvas(e){ const r=costruCanvas.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top}; }
-  function toTouch(t){ const r=costruCanvas.getBoundingClientRect(); return {x:t.clientX-r.left, y:t.clientY-r.top}; }
-
-  /* === Drag intera componente connessa === */
-  costruCanvas.addEventListener('mousedown',e=>{
-    const {x,y}=toCanvas(e);
-    if (eraser){
-      erasingHeld = true;
-      cursorRing.x = x; cursorRing.y = y;
-      tryEraseAt(x,y);
-      draw();
-      return;
-    }
-    const hitNum = hitNum2(x,y);
-    if (hitNum){ dragNum2=hitNum; return; }
-
-    const P = selectAt(x,y);
-    if (!P) return;
-    // calcola la componente connessa dell'elemento selezionato
-    const comp = new Set(connectedComponentForPiece(P).map(p=>p.id));
-    drag = { anchor:P, ox:x-P.x, oy:y-P.y, comp };
-  });
 
   costruCanvas.addEventListener('mousemove',e=>{
     if (eraser){
@@ -1057,31 +1099,42 @@ nums1.addEventListener('mousemove',e=>{
       return;
     }
     if (!drag) return;
-
     const {x,y}=toCanvas(e);
-    const A = drag.anchor;
+    const A=pieces[drag.index];
     const nx=x-drag.ox, ny=y-drag.oy;
     const dx=nx-A.x, dy=ny-A.y;
 
-    // muove TUTTI i pezzi della componente
-    pieces.forEach(p=>{ if (drag.comp.has(p.id)){ p.x += dx; p.y += dy; }});
+    // sposta INTERO COMPONENTE CONNESSO (non si sfalda)
+    const comp = connectedComponentForPiece(A);
+    comp.forEach(p => { p.x += dx; p.y += dy; });
+
+    trySnapGroup(A.groupId);
     draw();
   });
 
+  costruCanvas.addEventListener('mousedown',e=>{
+    const {x,y}=toCanvas(e);
+    if (eraser){
+      erasingHeld = true;
+      cursorRing.x = x; cursorRing.y = y;
+      tryEraseAt(x,y);
+      draw();
+      return;
+    }
+    const n = hitNum2(x,y);
+    if (n){ dragNum2=n; return; }
+    const idx=selectAt(x,y); if (idx===-1) return;
+    const p=pieces[idx]; drag={index:idx, ox:x-p.x, oy:y-p.y};
+  });
   window.addEventListener('mouseup',()=>{
     if (eraser){
       erasingHeld=false;
       cur.clearRect(0,0,costruCursor.width,costruCursor.height);
       draw();
     }
-    if (drag){
-      // prova snap tra l'intera componente trascinata e il resto
-      trySnapComponent(drag.comp);
-      drag=null; saveWorkForQuestion();
-    }
+    if (drag){ drag=null; saveWorkForQuestion(); }
     if (dragNum2){ dragNum2=null; saveWorkForQuestion(); }
   });
-
   costruCanvas.addEventListener('mouseleave', ()=>{
     if (eraser){
       erasingHeld=false;
@@ -1091,25 +1144,15 @@ nums1.addEventListener('mousemove',e=>{
     if (dragNum2){ dragNum2=null; saveWorkForQuestion(); }
   });
 
-  /* Touch */
-  costruCanvas.addEventListener('touchstart',e=>{
-    if(!e.touches.length) return; const {x,y}=toTouch(e.touches[0]);
-    if (eraser){
-      erasingHeld=true; cursorRing.x=x; cursorRing.y=y; draw(); tryEraseAt(x,y); return;
-    }
-    const n = hitNum2(x,y);
-    if (n){ dragNum2=n; return; }
-    const P = selectAt(x,y); if (!P) return;
-    const comp = new Set(connectedComponentForPiece(P).map(p=>p.id));
-    drag = { anchor:P, ox:x-P.x, oy:y-P.y, comp };
-  },{passive:true});
-
+  function toTouch(t){ const r=costruCanvas.getBoundingClientRect(); return {x:t.clientX-r.left, y:t.clientY-r.top}; }
   costruCanvas.addEventListener('touchmove',e=>{
     if(!e.touches.length) return;
     const {x,y}=toTouch(e.touches[0]);
     if (eraser){
       if (erasingHeld){
-        cursorRing.x=x; cursorRing.y=y; tryEraseAt(x,y); draw();
+        cursorRing.x=x; cursorRing.y=y;
+        tryEraseAt(x,y);
+        draw();
       }
       return;
     }
@@ -1117,18 +1160,30 @@ nums1.addEventListener('mousemove',e=>{
       dragNum2.x=x; dragNum2.y=y; draw(); return;
     }
     if (!drag) return;
-
-    const A = drag.anchor;
+    const A=pieces[drag.index];
     const nx=x-drag.ox, ny=y-drag.oy; const dx=nx-A.x, dy=ny-A.y;
-    pieces.forEach(p=>{ if (drag.comp.has(p.id)){ p.x += dx; p.y += dy; }});
-    draw();
-  },{passive:true});
 
+    const comp = connectedComponentForPiece(A);
+    comp.forEach(p => { p.x += dx; p.y += dy; });
+
+    trySnapGroup(A.groupId); draw();
+  },{passive:true});
+  costruCanvas.addEventListener('touchstart',e=>{
+    if(!e.touches.length) return; const {x,y}=toTouch(e.touches[0]);
+    if (eraser){
+      erasingHeld=true; cursorRing.x=x; cursorRing.y=y; draw(); tryEraseAt(x,y); return;
+    }
+    const n = hitNum2(x,y);
+    if (n){ dragNum2=n; return; }
+    const idx=selectAt(x,y); if (idx===-1) return; const p=pieces[idx]; drag={index:idx, ox:x-p.x, oy:y-p.y};
+  },{passive:true});
   costruCanvas.addEventListener('touchend',()=>{
     if (eraser){
-      erasingHeld=false; cur.clearRect(0,0,costruCursor.width,costruCursor.height); draw();
+      erasingHeld=false;
+      cur.clearRect(0,0,costruCursor.width,costruCursor.height);
+      draw();
     }
-    if (drag){ trySnapComponent(drag.comp); drag=null; saveWorkForQuestion(); }
+    if (drag){ drag=null; saveWorkForQuestion(); }
     if (dragNum2){ dragNum2=null; saveWorkForQuestion(); }
   },{passive:true});
 
@@ -1148,23 +1203,20 @@ nums1.addEventListener('mousemove',e=>{
 
   setQuestion(0);
 
-  /* ===== SNAP: intera componente verso il resto ===== */
-  function getPortsCache(p){ return getPorts(p); }
-
-  function trySnapComponent(compSet){
-    // raccogli tutti i porti liberi della componente trascinata
+  /* SNAP invariato (usa port matching + traduzione gruppo originario) */
+  function trySnapGroup(gid){
+    const members = groupMembers(gid);
     let best = null;
-    for (const A of pieces){
-      if (!compSet.has(A.id)) continue;
-      const portsA = getPortsCache(A);
-      for (const aKey in portsA){
-        if (A.engaged[aKey]) continue;
-        const tA = A.connectors?.[aKey]||'none';
-        if (tA==='none') continue;
 
-        for (const B of pieces){
-          if (compSet.has(B.id)) continue; // non collegare dentro la stessa componente
-          const portsB = getPortsCache(B);
+    for (const A of members){
+      const portsA = getPorts(A);
+      for (const B of pieces){
+        if (B.groupId===gid) continue;
+        const portsB = getPorts(B);
+        for (const aKey in portsA){
+          if (A.engaged[aKey]) continue;
+          const tA = A.connectors?.[aKey]||'none';
+          if (tA==='none') continue;
           for (const bKey in portsB){
             if (B.engaged[bKey]) continue;
             const tB = B.connectors?.[bKey]||'none';
@@ -1173,7 +1225,7 @@ nums1.addEventListener('mousemove',e=>{
 
             const aPt = portsA[aKey], bPt = portsB[bKey];
             const d = Math.hypot(aPt.x - bPt.x, aPt.y - bPt.y);
-            const R = 10; // raggio di snap "morbido"
+            const R = 10; // come prima
             if (d <= R){
               if (!best || d < best.d) best = {A,aKey,aPt,B,bKey,bPt,d};
             }
@@ -1182,21 +1234,19 @@ nums1.addEventListener('mousemove',e=>{
       }
     }
 
-    if (!best) { draw(); return; }
+    if (!best) return;
 
-    // trasla l'intera componente per allineare i due porti
     const dx = best.bPt.x - best.aPt.x;
     const dy = best.bPt.y - best.aPt.y;
-    pieces.forEach(p=>{ if (compSet.has(p.id)){ p.x += dx; p.y += dy; }});
+    translateGroup(gid, dx, dy);
 
-    // collega entrambe le estremità
     best.A.connections[best.aKey] = {peerId: best.B.id, peerSide: best.bKey};
     best.B.connections[best.bKey] = {peerId: best.A.id, peerSide: best.aKey};
     best.A.engaged[best.aKey] = true;
     best.B.engaged[best.bKey] = true;
 
-    sanitizeGraph(); // ricostruisce i gruppi coerenti
-    draw();
+    sanitizeGraph();
+    saveWorkForQuestion();
   }
 
 })();
@@ -1397,7 +1447,7 @@ function renderBuildSnapshot(payload, width=800, height=500){
 </script>
 
 <script>
-/* ===== Valutazione & Riepilogo + consegna + PIN + blur ===== */
+/* ===== Valutazione & Riepilogo + PIN + Home reset ===== */
 function editDistance(a,b){const dp=Array.from({length:b.length+1},(_,j)=>j);for(let i=1;i<=a.length;i++){let prev=i-1;dp[0]=i;for(let j=1;j<=b.length;j++){const tmp=dp[j];const cost=a[i-1]===b[j-1]?0:1;dp[j]=Math.min(dp[j]+1,dp[j-1]+1,prev+cost);prev=tmp;}}return dp[b.length];}
 function simFine(a,b){a=(a||'').toLowerCase().trim();b=(b||'').toLowerCase().trim();const L=Math.max(a.length,b.length);if(L===0)return 1;const ed=editDistance(a,b);const s=(L-ed)/L;if(s>=0.90)return 1.0;if(s>=0.75)return 0.75;if(s>=0.50)return 0.50;if(s>=0.25)return 0.25;return 0.0;}
 
@@ -1433,6 +1483,14 @@ document.getElementById('printBtn').addEventListener('click', ()=>{
   window.print();
 });
 
+/* Torna all’inizio = azzera e riparti */
+document.getElementById('homeBtn').addEventListener('click', ()=>{
+  const ok = confirm('Tornare alla schermata iniziale? Tutte le modifiche verranno azzerate.');
+  if (!ok) return;
+  clearAllWork();
+  goHome();
+});
+
 document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
   const sicuro = confirm('Sei sicuro di voler consegnare la verifica?\nPremi "OK" per consegnare o "Annulla" per tornare indietro.');
   if (!sicuro) return;
@@ -1442,16 +1500,15 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
     if(timerInt){clearInterval(timerInt); timerInt=null;}
     document.getElementById('sezione1').style.display='none';
     document.getElementById('sezione2').style.display='none';
-    examActive = false;            // esco dalla fase svolgimento
-    summaryActive = true;          // entro in riepilogo
-    summaryUnlocked = false;       // richiedi PIN
+    examActive = false;
+    summaryActive = true;
+    summaryUnlocked = false;
 
     const nome = (document.getElementById('nome').value||'').trim();
     const cognome = (document.getElementById('cognome').value||'').trim();
     const classe = (document.getElementById('classe').value||'').trim();
     const dataStr = (document.getElementById('data').value||'');
 
-    // intestazione
     const anag = document.getElementById('anagrafica');
     anag.innerHTML = `
       <div><strong>Studente:</strong> ${esc(nome)} ${esc(cognome)} — <strong>Classe:</strong> ${esc(classe)}</div>
@@ -1473,7 +1530,6 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
         const sNLP = nlpSimilarity(userTxt, corr);
         const sText = Math.max(sED, sNLP);
 
-        // Valutazione visiva SOLO con tratti+numeri (no immagine base)
         const key = (window.answerKeys||{})[file];
         const studOverlay = await studentOverlayOnlyPNG(file).catch(()=> '');
         let sVis=0, chosenMask='';
@@ -1484,13 +1540,12 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
           sVis = res.score;
           chosenMask = res.url || (Array.isArray(key.masks) ? key.masks[0] : key.masks);
         } else {
-          sVis = 0; // senza linee/numero -> 0
+          sVis = 0;
         }
 
         const pts = +((sText*(window.W_TEXT||1) + sVis*(window.W_VIS||1))).toFixed(2);
         puntiSec1 += pts;
 
-        // Per la visualizzazione manteniamo la versione con base+strokes+numeri
         const studImg = await compositeStudentImage(file).catch(()=> '');
 
         const card = document.createElement('div'); card.className='card';
@@ -1551,7 +1606,6 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
         const numsArr   = (payload && Array.isArray(payload.numbers2)) ? payload.numbers2 : [];
         const hasAnyContent = (piecesArr.length > 0) || (numsArr.length > 0);
 
-        // snapshot (pezzi + numeri)
         let studPNG = '';
         try{ if (payload) studPNG = renderBuildSnapshot(payload, 800, 500); }catch(_){ studPNG=''; }
 
@@ -1580,7 +1634,7 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
 
         const imgs = document.createElement('div'); imgs.className='wide';
         if (studPNG){ const i1=new Image(); i1.src=studPNG; i1.alt='Soluzione studente'; imgs.appendChild(i1); }
-        const sol=new Image(); sol.src=q.correctImg ? (chosenSol || (Array.isArray(q.correctImg)? q.correctImg[0] : q.correctImg)) : '';
+        const sol=new Image(); sol.src=chosenSol || (Array.isArray(q.correctImg)? q.correctImg[0] : q.correctImg) || '';
         sol.alt='Soluzione corretta'; imgs.appendChild(sol);
 
         card.appendChild(txt); card.appendChild(imgs);
