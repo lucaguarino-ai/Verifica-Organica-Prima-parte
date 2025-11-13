@@ -204,9 +204,10 @@
       </div>
     </div>
       <!-- Numerazione sezione 2 -->
+              <span style="margin-left:12px;"><strong>Numerazione:</strong></span>
       <div class="toolbar leftAlign">
                 <span><strong>Numerazione:</strong></span>
-                <div class="row" id="numsToolbar2">
+                <div class="row" id="numsToolbar2" style="gap:4px;">
                   <button class="numBtn num2">1</button>
                   <button class="numBtn num2">2</button>
                   <button class="numBtn num2">3</button>
@@ -215,7 +216,7 @@
                   <button class="numBtn num2">6</button>
                   <button class="numBtn num2">7</button>
                   <button class="numBtn num2">8</button>
-           </div>
+    </div>
   </div>
 </div>
 
@@ -355,11 +356,11 @@ document.getElementById('iniziaBtn').addEventListener('click', ()=>{
 /* ===== Sezione 1 ===== */
 const molFiles=["alcano.jpg","alchene.jpg","alchino.jpg","diene.jpg","benzene.jpg"];
 const correctNames={
-  "alcano.jpg":"3,5 dietil-3,5 dimetilottano",
-  "alchene.jpg":"5 etil-3 metil-4 ottene",
-  "alchino.jpg":"4 Br-6 Cl-4 etil-2 eptino",
-  "diene.jpg":"trans 3 Cl-4 etil-3 eptene",
-  "benzene.jpg":"4 Br-2 Cl-1 etilcicloesano"
+  "alcano.jpg":"3,5dietil-3,5dimetilottano",
+  "alchene.jpg":"5etil-3metil-4ottene",
+  "alchino.jpg":"4Br-6Cl-4etil-2eptino",
+  "diene.jpg":"trans 3Cl-4etil-3eptene",
+  "benzene.jpg":"4Br-2Cl-1etilcicloesano"
 };
 const correctImagesAnnota = {
   "alcano.jpg":  ["alcano_A_corretto.png","alcano_B_corretto.png"],
@@ -627,8 +628,8 @@ nums1.addEventListener('mousemove',e=>{
 
   const questions = [
     {testo:"Costruisci: 3,3-dibromo-1,1,5,5-tetracloropentano",correctImg:["costruzione_1_corretto.png"]},
-    {testo:"Costruisci: 1-cloro-4,4-dimetil-2-esino",correctImg:["costruzione_2_corretto.png"]},
-    {testo:"Costruisci: 1-bromo-3-etil-4-metil-3-esene",correctImg:["costruzione_3_corretto.png"]}
+    {testo:"Costruisci: 1-cloro-4,4-dimetil-2-esino",correctImg:["costruzione_2_corretto_A.png","costruzione_2_corretto_B.png"]},
+    {testo:"Costruisci: 1-bromo-3-etil-4-metil-3-esene",correctImg:["costruzione_3_corretto_A.png","costruzione_3_corretto_B.png"]}
   ];
   let qIndex=0;
   const domandaText=document.getElementById('domandaText');
@@ -1548,7 +1549,7 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
         const saved = JSON.parse(localStorage.getItem('annota_'+file) || '{}');
 
         const userTxt = (saved.text||'').trim();
-        const corr = ({"alcano.jpg":"3,5 dietil-3,5 dimetilottano","alchene.jpg":"5 etil-3 metil-4 ottene","alchino.jpg":"4 Br-6 Cl-4 etil-2 eptino","diene.jpg":"trans 3 Cl-4 etil-3 eptene","benzene.jpg":"4 Br-2 Cl-1 etilcicloesano"})[file] || '';
+        const corr = ({"alcano.jpg":"3,5dietil-3,5dimetilottano","alchene.jpg":"5etil-3metil-4ottene","alchino.jpg":"4Br-6Cl-4etil-2eptino","diene.jpg":"trans 3Cl-4etil-3eptene","benzene.jpg":"4Br-2Cl-1etilcicloesano"})[file] || '';
         const sED  = simFine(userTxt, corr);
         const sNLP = nlpSimilarity(userTxt, corr);
         const sText = Math.max(sED, sNLP);
@@ -1614,8 +1615,8 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
 
     const questions=[
       {testo:"Costruisci: 3,3-dibromo-1,1,5,5-tetracloropentano", correctImg:["costruzione_1_corretto.png"]},
-      {testo:"Costruisci: 1-cloro-4,4-dimetil-2-esino",            correctImg:["costruzione_2_corretto.png"]},
-      {testo:"Costruisci: 1-bromo-3-etil-4-metil-3-esene",         correctImg:["costruzione_3_corretto.png"]}
+      {testo:"Costruisci: 1-cloro-4,4-dimetil-2-esino",            correctImg:["costruzione_2_corretto_A.png","costruzione_2_corretto_B.png"]},
+      {testo:"Costruisci: 1-bromo-3-etil-4-metil-3-esene",         correctImg:["costruzione_3_corretto_A.png","costruzione_3_corretto_B.png"]}
     ];
 
     for (let idx=0; idx<questions.length; idx++){
@@ -1674,7 +1675,7 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
       <div><strong>Sezione 1:</strong> ${puntiSec1.toFixed(2)} / 10 — <strong>Sezione 2:</strong> ${puntiSec2.toFixed(2)} / 3</div>
       <div style="margin-top:6px; font-size:18px;">
         <strong>Punteggio complessivo:</strong> ${voto} / 10 — 
-        ${voto>=6 ? '<span class="badge ok">Bravo!</span>' : '<span class="badge err">Peccato, studia meglio per la prossima verifica.</span>'}
+        ${voto>=6 ? '<span class="badge ok">Ben fatto, continua a studiare 😉</span>' : '<span class="badge err">Peccato, studia meglio per la prossima verifica 💪</span>'}
       </div>
     `;
 
