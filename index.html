@@ -80,28 +80,30 @@
   #pinErr{ color:#c62828; min-height:18px; font-size:13px; }
 
   /* Firma digitale singola (footer) */
+.lg-sign{
+  position:relative;        /* non più fixed, segue il flusso della pagina */
+  margin-top:16px;
+  text-align:center;
+  color:#2e7d32;
+  opacity:.65;
+  font-size:12px;
+  font-weight:bold;
+}
+
+/* Stampa */
+@media print{
+  body{ background:#fff; }
+  .section{ border:none; box-shadow:none; }
+  #pinOverlay{ display:none !important; }
+
   .lg-sign{
-    position:fixed;
-    left:0; right:0; bottom:8px;
-    text-align:center;
-    color:#2e7d32;
-    opacity:.65;
-    font-size:12px;
-    font-weight:bold;
-    pointer-events:none;
-    z-index:1000;
+    position:fixed;         /* in stampa la mettiamo in basso al foglio */
+    left:0;
+    right:0;
+    bottom:6mm;
+    display:block !important;
   }
-  @media print{
-    body{ background:#fff; }
-    .section{ border:none; box-shadow:none; }
-    #pinOverlay{ display:none !important; }
-    .lg-sign{
-      position:fixed;
-      bottom:6mm;
-      left:0; right:0;
-      display:block !important;
-    }
-  }
+}
 </style>
 </head>
 <body>
@@ -1611,6 +1613,7 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
       <div><strong>Studente:</strong> ${esc(nome)} ${esc(cognome)} — <strong>Classe:</strong> ${esc(classe)}</div>
       <div><strong>Data:</strong> ${esc(dataStr)} — <strong>Inizio:</strong> ${fmtTime(startTime)} — <strong>Fine:</strong> ${esc(fmtTime(endTime))}</div>
     `;
+document.getElementById('resultSection').style.display='block';
 
     /* ===== Sezione 1 ===== */
     let puntiSec1=0;
@@ -1752,8 +1755,6 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
         ${voto>=6 ? '<span class="badge ok">Ben fatto, continua a studiare 😉</span>' : '<span class="badge err">Peccato, studia meglio per la prossima verifica 💪</span>'}
       </div>
     `;
-
-    document.getElementById('resultSection').style.display='block';
 
     // Mostra overlay PIN, blur e blocco
     pinErr.textContent = '';
