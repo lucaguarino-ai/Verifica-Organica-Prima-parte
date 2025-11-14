@@ -1283,6 +1283,32 @@ nums1.addEventListener('mousemove',e=>{
 /* ===== Image utils & overlay scoring (SEZ.1 vs SEZ.2 separati) ===== */
 function luma601(r,g,b){ return 0.299*r + 0.587*g + 0.114*b; }
 function loadImageData(src, w, h){
+function loadTeacherFittedData(src, targetW, targetH){
+  return new Promise(res=>{
+    const img = new Image();
+    img.onload=()=>{
+      const c=document.createElement('canvas');
+      c.width = targetW;
+      c.height = targetH;
+      const g=c.getContext('2d');
+      // sfondo bianco
+      g.fillStyle = '#ffffff';
+      g.fillRect(0,0,targetW,targetH);
+
+      // scala con proporzioni mantenute
+      const scale = Math.min(targetW / img.width, targetH / img.height);
+      const dw = img.width * scale;
+      const dh = img.height * scale;
+      const dx = (targetW - dw) / 2;
+      const dy = (targetH - dh) / 2;
+
+      g.drawImage(img, dx, dy, dw, dh);
+      res(g.getImageData(0,0,targetW,targetH));
+    };
+    img.onerror=()=>res(null);
+    img.src = src || '';
+  });
+}
   return new Promise(res=>{
     const img=new Image();
     img.crossOrigin = 'anonymous';
@@ -1346,13 +1372,18 @@ function diceScore(A,B){
   return (2*tp)/(a+b);
 }
 
-/* ---- Curva per SEZIONE 1: più severa sui disegni parziali ---- */
+/* ---- Curva per SEZIONE 1: più generosa se quasi giusta, più severa sui pasticci ---- */
 function normalizeDiceAnnota(raw){
-  if (raw <= 0.15) return 0;      // quasi nulla sovrapposizione → 0
-  if (raw >= 0.40) return 1;      // oltre questa soglia consideriamo praticamente "ok"
-  const t = (raw - 0.15) / (0.40 - 0.15); // 0..1
-  const gamma = 1.2;              // >1 → abbassa i valori medi
-  return Math.pow(Math.max(0,Math.min(1,t)), gamma);
+  // raw = Dice grezzo tra 0 e 1
+  if (raw <= 0.10) return 0;      // quasi nessuna sovrapposizione → 0
+  if (raw >= 0.55) return 1;      // sopra questa soglia la consideriamo "molto buona"
+
+  // porta raw da [0.10, 0.55] a [0,1]
+  const t = (raw - 0.10) / (0.55 - 0.10);
+  // gamma > 1 → abbassa la fascia media, alza la parte alta
+  const gamma = 1.7;
+
+  return Math.pow(Math.max(0, Math.min(1, t)), gamma);
 }
 
 /* ---- Curva per SEZIONE 2: molto più generosa ---- */
@@ -1391,7 +1422,7 @@ async function bestOverlapAnnota(studentDataUrl, teacherUrls){
 async function scoreOverlapCostru(studentPNG, teacherPngUrl){
   const stud = await dataUrlToImageData(studentPNG);
   if(!stud) return 0;
-  const teach = await loadImageData(teacherPngUrl, stud.width, stud.height);
+  const teach = await loadTeacherFittedData(teacherPngUrl, stud.width, stud.height);
   if(!teach) return 0;
   const A = maskFromNonWhite(stud, 250);
   const B = maskFromNonWhite(teach, 250);
