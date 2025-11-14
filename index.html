@@ -1283,6 +1283,7 @@ nums1.addEventListener('mousemove',e=>{
 <script>
 /* ===== Image utils & overlay scoring ===== */
 function luma601(r,g,b){ return 0.299*r + 0.587*g + 0.114*b; }
+
 function loadImageData(src, w, h){
   return new Promise(res=>{
     const img=new Image();
@@ -1297,6 +1298,7 @@ function loadImageData(src, w, h){
     img.src=src||'';
   });
 }
+
 function dataUrlToImageData(dataUrl){
   return new Promise(res=>{
     const img=new Image();
@@ -1309,14 +1311,20 @@ function dataUrlToImageData(dataUrl){
     img.src=dataUrl||'';
   });
 }
+
 function maskFromNonWhite(img, whiteTol=250){
-  const {data,width,height}=img; const out=new Uint8Array(width*height);
+  const {data,width,height}=img;
+  const out=new Uint8Array(width*height);
   for(let i=0,px=0;i<data.length;i+=4,px++){
-    const a=data[i+3]; if(a===0){ out[px]=0; continue; }
-    const Y=luma601(data[i],data[i+1],data[i+2]); out[px]=(Y<whiteTol)?1:0;
+    const a=data[i+3];
+    if(a===0){ out[px]=0; continue; }
+    const Y=luma601(data[i],data[i+1],data[i+2]);
+    out[px]=(Y<whiteTol)?1:0;
   }
   return {mask:out,width,height};
 }
+
+/* più “tollerante”: di default 4 passi di dilatazione */
 function dilateN(mask,w,h,steps=4){
   let cur = mask;
   const N = [-w-1,-w,-w+1,-1,0,1,w-1,w,w+1];
@@ -1340,19 +1348,29 @@ function dilateN(mask,w,h,steps=4){
   }
   return cur;
 }
+
 function diceScore(A,B){
   let tp=0,a=0,b=0;
-  for(let i=0;i<A.length;i++){ const va=A[i], vb=B[i]; if(va) a++; if(vb) b++; if(va&&vb) tp++; }
+  for(let i=0;i<A.length;i++){
+    const va=A[i], vb=B[i];
+    if(va) a++;
+    if(vb) b++;
+    if(va&&vb) tp++;
+  }
   if(a+b===0) return 1;
   return (2*tp)/(a+b);
+}
+
+/* normalizza il Dice: valori “realistici” vengono spinti verso 1 */
 function normalizeDice(raw){
-  // raw è tra 0 e 1; nella pratica valori >0.45 sono già “molto simili”.
+  // raw è tra 0 e 1; nella pratica valori >0.45 sono già molto simili
   if (raw <= 0) return 0;
   const scaled = raw / 0.45;  // 0.45 → 1.0
   if (scaled > 1) return 1;
   if (scaled < 0) return 0;
   return scaled;
 }
+
 async function scoreStrokesOverlap(studentPNG, teacherPngUrl){
   const stud = await dataUrlToImageData(studentPNG);
   if(!stud) return 0;
@@ -1363,15 +1381,16 @@ async function scoreStrokesOverlap(studentPNG, teacherPngUrl){
   const A = maskFromNonWhite(stud, 250);
   const B = maskFromNonWhite(teach, 250);
 
-  // più tolleranza sullo spessore / piccole traslazioni
+  // più tolleranza su spessore e piccoli spostamenti
   const Ad = dilateN(A.mask, A.width, A.height, 4);
   const Bd = dilateN(B.mask, B.width, B.height, 4);
 
-  const raw  = diceScore(Ad, Bd);      // valore “grezzo”
-  const norm = normalizeDice(raw);     // valore “stirato” 0–1
+  const raw  = diceScore(Ad, Bd);      // punteggio grezzo
+  const norm = normalizeDice(raw);     // punteggio “stirato” 0–1
 
   return norm;
 }
+
 async function bestOverlapFromList(studentDataUrl, teacherUrls){
   const urls = Array.isArray(teacherUrls) ? teacherUrls : [teacherUrls].filter(Boolean);
   let best = {score:0, url:(urls[0]||'')};
@@ -1393,17 +1412,20 @@ function compositeStudentImage(file){
       c.width=img.width; c.height=img.height;
       const t=c.getContext('2d');
       t.drawImage(img,0,0);
+
       if(saved.strokes){
         const s=new Image();
         s.onload=()=>{
           t.drawImage(s,0,0);
-          t.fillStyle='#2e7d32'; t.font='bold 16px Arial';
+          t.fillStyle='#2e7d32';
+          t.font='bold 16px Arial';
           (saved.numbers||[]).forEach(n=>t.fillText(n.text,n.x-4,n.y+5));
           resolve(c.toDataURL('image/png'));
         };
         s.src=saved.strokes;
       }else{
-        t.fillStyle='#2e7d32'; t.font='bold 16px Arial';
+        t.fillStyle='#2e7d32';
+        t.font='bold 16px Arial';
         (saved.numbers||[]).forEach(n=>t.fillText(n.text,n.x-4,n.y+5));
         resolve(c.toDataURL('image/png'));
       }
@@ -1412,6 +1434,7 @@ function compositeStudentImage(file){
     img.src=file;
   });
 }
+
 /* Sez.1 overlay-only (strokes+numeri) */
 function studentOverlayOnlyPNG(file){
   return new Promise(resolve=>{
@@ -1419,27 +1442,32 @@ function studentOverlayOnlyPNG(file){
       const savedRaw = localStorage.getItem('annota_'+file);
       const saved = savedRaw ? JSON.parse(savedRaw) : null;
       if(!saved){ resolve(''); return; }
+
       const hasStrokes = !!(saved.strokes);
       const hasNums = Array.isArray(saved.numbers) && saved.numbers.length>0;
       if(!hasStrokes && !hasNums){ resolve(''); return; }
+
       const img = new Image();
       img.onload=()=>{
         const c=document.createElement('canvas');
         c.width=img.width; c.height=img.height;
         const t=c.getContext('2d');
+
         if (hasStrokes){
           const s=new Image();
           s.onload=()=>{
             t.drawImage(s,0,0);
             if(hasNums){
-              t.fillStyle='#2e7d32'; t.font='bold 16px Arial';
+              t.fillStyle='#2e7d32';
+              t.font='bold 16px Arial';
               (saved.numbers||[]).forEach(n=>t.fillText(n.text,n.x-4,n.y+5));
             }
             resolve(c.toDataURL('image/png'));
           };
           s.src=saved.strokes;
         } else {
-          t.fillStyle='#2e7d32'; t.font='bold 16px Arial';
+          t.fillStyle='#2e7d32';
+          t.font='bold 16px Arial';
           (saved.numbers||[]).forEach(n=>t.fillText(n.text,n.x-4,n.y+5));
           resolve(c.toDataURL('image/png'));
         }
@@ -1456,24 +1484,58 @@ function renderBuildSnapshot(payload, width=800, height=500){
     const c=document.createElement('canvas'); c.width=width; c.height=height;
     const ctx=c.getContext('2d');
     ctx.fillStyle='#fff'; ctx.fillRect(0,0,width,height);
+
     const FONT='20px Arial';
     ctx.font=FONT; ctx.textBaseline='middle';
-    const labelOf = (kind)=>( kind==='bond-'?'—': kind==='bond='?'=': kind==='bond≡'?'≡': kind==='bondV'?'|': kind==='CH2'?'CH₂': kind==='CH3'?'CH₃': kind );
-    function boatVertices(a){ const x=a.x,y=a.y;return[{x:x+40,y:y+135},{x:x+140,y:y+60},{x:x+260,y:y+95},{x:x+395,y:y+180},{x:x+300,y:y+235},{x:x+170,y:y+205}]; }
+
+    const labelOf = (kind)=>(
+      kind==='bond-'?'—':
+      kind==='bond='?'=':
+      kind==='bond≡'?'≡':
+      kind==='bondV'?'|':
+      kind==='CH2'?'CH₂':
+      kind==='CH3'?'CH₃':
+      kind
+    );
+
+    function boatVertices(a){
+      const x=a.x,y=a.y;
+      return [
+        {x:x+40,y:y+135},
+        {x:x+140,y:y+60},
+        {x:x+260,y:y+95},
+        {x:x+395,y:y+180},
+        {x:x+300,y:y+235},
+        {x:x+170,y:y+205}
+      ];
+    }
+
     (payload?.pieces||[]).forEach(p=>{
       ctx.save();
       if (p.kind==='boat'){
         const vs=boatVertices(p);
-        ctx.beginPath(); ctx.moveTo(vs[0].x,vs[0].y); for(let k=1;k<vs.length;k++) ctx.lineTo(vs[k].x,vs[k].y); ctx.closePath(); ctx.strokeStyle='#000'; ctx.lineWidth=2; ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(vs[0].x,vs[0].y);
+        for(let k=1;k<vs.length;k++) ctx.lineTo(vs[k].x,vs[k].y);
+        ctx.closePath();
+        ctx.strokeStyle='#000';
+        ctx.lineWidth=2;
+        ctx.stroke();
       } else {
-        ctx.fillStyle='#fff'; ctx.fillRect(p.x, p.y, p.w, p.h);
-        const lab=labelOf(p.kind); const tw=ctx.measureText(lab).width;
-        ctx.fillStyle='#000'; ctx.fillText(lab,(p.w-tw)/2 + p.x, p.h/2 + p.y);
+        ctx.fillStyle='#fff';
+        ctx.fillRect(p.x, p.y, p.w, p.h);
+        const lab=labelOf(p.kind);
+        const tw=ctx.measureText(lab).width;
+        ctx.fillStyle='#000';
+        ctx.fillText(lab,(p.w-tw)/2 + p.x, p.h/2 + p.y);
       }
       ctx.restore();
     });
-    ctx.fillStyle='#2e7d32'; ctx.font='bold 16px Arial';
+
+    ctx.fillStyle='#2e7d32';
+    ctx.font='bold 16px Arial';
     (payload?.numbers2||[]).forEach(n=> ctx.fillText(n.text, n.x-4, n.y+6));
+
     return c.toDataURL('image/png');
   }catch(_){ return ''; }
 }
