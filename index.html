@@ -79,17 +79,15 @@
   #pinBox h3{ margin:0 0 8px; }
   #pinErr{ color:#c62828; min-height:18px; font-size:13px; }
 
-  /* Firma digitale singola (footer) */
+  /* Firma digitale singola (footer) - ora non è più fixed a schermo */
   .lg-sign{
-    position:fixed;
-    left:0; right:0; bottom:8px;
     text-align:center;
     color:#2e7d32;
     opacity:.65;
     font-size:12px;
     font-weight:bold;
     pointer-events:none;
-    z-index:1000;
+    margin-top:10px;
   }
   @media print{
     body{ background:#fff; }
@@ -1348,11 +1346,17 @@ function diceScore(A,B){
   if(a+b===0) return 1;
   return (2*tp)/(a+b);
 }
-/* NORMALIZZAZIONE DEL DICE: rende 0.45 ≈ 1.0 */
+/* NORMALIZZAZIONE + BOOST DEI VALORI MEDI */
 function normalizeDice(raw){
   if (raw <= 0) return 0;
-  const scaled = raw / 0.45; // 0.45 -> 1.0
-  return Math.max(0, Math.min(1, scaled));
+
+  // prima normalizziamo come prima (0.45 ~ soluzione buona)
+  const base = raw / 0.45;
+  const clipped = Math.max(0, Math.min(1, base));
+
+  // gamma < 1 => valori medi (0.3–0.6) vengono alzati
+  const gamma = 0.6;
+  return Math.pow(clipped, gamma);
 }
 async function scoreStrokesOverlap(studentPNG, teacherPngUrl){
   const stud = await dataUrlToImageData(studentPNG);
