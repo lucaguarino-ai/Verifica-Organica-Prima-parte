@@ -201,21 +201,18 @@
         <button id="togglePorts2">Porte on/off</button>
         <button id="eraser2">🩹 Gomma</button>
         <button id="clear2">🗑️ Pulisci</button>
-      </div>
-    </div>
-      <!-- Numerazione sezione 2 -->
-              <span style="margin-left:12px;"><strong>Numerazione:</strong></span>
-      <div class="toolbar leftAlign">
-                <span><strong>Numerazione:</strong></span>
-                <div class="row" id="numsToolbar2" style="gap:4px;">
-                  <button class="numBtn num2">1</button>
-                  <button class="numBtn num2">2</button>
-                  <button class="numBtn num2">3</button>
-                  <button class="numBtn num2">4</button>
-                  <button class="numBtn num2">5</button>
-                  <button class="numBtn num2">6</button>
-                  <button class="numBtn num2">7</button>
-                  <button class="numBtn num2">8</button>
+      
+        <!-- Numerazione sezione 2 -->
+        <span style="margin-left:12px;"><strong>Numerazione:</strong></span>
+        <div class="row" id="numsToolbar2" style="gap:4px;">
+          <button class="numBtn num2">1</button>
+          <button class="numBtn num2">2</button>
+          <button class="numBtn num2">3</button>
+          <button class="numBtn num2">4</button>
+          <button class="numBtn num2">5</button>
+          <button class="numBtn num2">6</button>
+          <button class="numBtn num2">7</button>
+          <button class="numBtn num2">8</button>
     </div>
   </div>
 </div>
@@ -1320,7 +1317,7 @@ function maskFromNonWhite(img, whiteTol=250){
   }
   return {mask:out,width,height};
 }
-function dilateN(mask,w,h,steps=2){
+function dilateN(mask,w,h,steps=4){
   let cur = mask;
   const N = [-w-1,-w,-w+1,-1,0,1,w-1,w,w+1];
   for(let s=0;s<steps;s++){
@@ -1348,17 +1345,32 @@ function diceScore(A,B){
   for(let i=0;i<A.length;i++){ const va=A[i], vb=B[i]; if(va) a++; if(vb) b++; if(va&&vb) tp++; }
   if(a+b===0) return 1;
   return (2*tp)/(a+b);
+function normalizeDice(raw){
+  // raw è tra 0 e 1; nella pratica valori >0.45 sono già “molto simili”.
+  if (raw <= 0) return 0;
+  const scaled = raw / 0.45;  // 0.45 → 1.0
+  if (scaled > 1) return 1;
+  if (scaled < 0) return 0;
+  return scaled;
 }
 async function scoreStrokesOverlap(studentPNG, teacherPngUrl){
   const stud = await dataUrlToImageData(studentPNG);
   if(!stud) return 0;
+
   const teach = await loadImageData(teacherPngUrl, stud.width, stud.height);
   if(!teach) return 0;
+
   const A = maskFromNonWhite(stud, 250);
   const B = maskFromNonWhite(teach, 250);
-  const Ad = dilateN(A.mask, A.width, A.height, 2);
-  const Bd = dilateN(B.mask, B.width, B.height, 2);
-  return diceScore(Ad, Bd);
+
+  // più tolleranza sullo spessore / piccole traslazioni
+  const Ad = dilateN(A.mask, A.width, A.height, 4);
+  const Bd = dilateN(B.mask, B.width, B.height, 4);
+
+  const raw  = diceScore(Ad, Bd);      // valore “grezzo”
+  const norm = normalizeDice(raw);     // valore “stirato” 0–1
+
+  return norm;
 }
 async function bestOverlapFromList(studentDataUrl, teacherUrls){
   const urls = Array.isArray(teacherUrls) ? teacherUrls : [teacherUrls].filter(Boolean);
