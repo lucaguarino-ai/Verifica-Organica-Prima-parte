@@ -1315,7 +1315,7 @@ function maskFromNonWhite(img, whiteTol=250){
   }
   return {mask:out,width,height};
 }
-function dilateN(mask,w,h,steps=5){
+function dilateN(mask,w,h,steps=7){
   let cur = mask;
   const N = [-w-1,-w,-w+1,-1,0,1,w-1,w,w+1];
   for(let s=0;s<steps;s++){
@@ -1345,16 +1345,34 @@ function diceScore(A,B){
   return (2*tp)/(a+b);
 }
 
-/* Mappatura più severa sulla fascia media.
-   - raw >= 0.8  => 1 pieno
-   - raw medio   => schiacciato verso il basso (0.4–0.6)
-*/
+// Dice "grezza": nessuna compressione qui
 function mapDice(raw){
   if (raw <= 0) return 0;
-  // Se la sovrapposizione è molto alta, assegna 1 pieno
-  if (raw >= 0.85) return 1;
-  // Altrimenti riallinea in modo dolce: 0.85 di Dice -> 1
-  return Math.max(0, Math.min(1, raw / 0.85));
+  if (raw >= 1) return 1;
+  return raw;
+}
+
+// Calibrazione didattica:
+// - <=0.30: resta basso
+// - 0.30–0.50: sale verso 0.40–0.80
+// - 0.50–0.80: sale verso 0.80–1.00
+// - >=0.80: 1 pieno
+function calibrateVisual(r){
+  if (r <= 0) return 0;
+
+  if (r >= 0.80) return 1;
+
+  if (r >= 0.50){
+    const t = (r - 0.50) / 0.30;
+    return 0.80 + t * 0.20;
+  }
+
+  if (r >= 0.30){
+    const t = (r - 0.30) / 0.20;
+    return 0.40 + t * 0.40;
+  }
+
+  return r;
 }
 
 async function scoreStrokesOverlap(studentPNG, teacherPngUrl){
@@ -1364,14 +1382,13 @@ async function scoreStrokesOverlap(studentPNG, teacherPngUrl){
   if(!teach) return 0;
   const A = maskFromNonWhite(stud, 250);
   const B = maskFromNonWhite(teach, 250);
-  const Ad = dilateN(A.mask, A.width, A.height, 3);
-  const Bd = dilateN(B.mask, B.width, B.height, 3);
+  const Ad = dilateN(A.mask, A.width, A.height, 7);
+  const Bd = dilateN(B.mask, B.width, B.height, 7);
   const raw = diceScore(Ad, Bd);
   const norm = mapDice(raw);
   return norm;
 }
 
-/* ora ritorniamo anche la lista dei punteggi per ogni maschera */
 async function bestOverlapFromList(studentDataUrl, teacherUrls){
   const urls = Array.isArray(teacherUrls) ? teacherUrls : [teacherUrls].filter(Boolean);
   let bestScore = 0;
@@ -1575,30 +1592,19 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
 
         const key = (window.answerKeys||{})[file];
         const studOverlay = await studentOverlayOnlyPNG(file).catch(()=> '');
-        let sVis=0;
-        let teacherList = [];
+        let sVisRaw=0;
         const hasContent = !!studOverlay;
 
         if (hasContent && key && key.masks){
           const res = await bestOverlapFromList(studOverlay, key.masks);
-          sVis = res.score;
-
-          const ranked = (res.ranked || []);
-          const bestScore = res.score;
-          ranked.forEach(r=>{
-            if (r.score >= Math.max(0.6, bestScore*0.9)){
-              teacherList.push(r.url);
-            }
-          });
-          if (!teacherList.length){
-            const fallback = res.url || (Array.isArray(key.masks) ? key.masks[0] : key.masks);
-            if (fallback) teacherList.push(fallback);
-          }
+          sVisRaw = res.score;
         } else {
-          sVis = 0;
+          sVisRaw = 0;
         }
 
-        const pts = +((sText*(window.W_TEXT||1) + sVis*(window.W_VIS||1))).toFixed(2);
+        const sVisAdj = calibrateVisual(sVisRaw);
+
+        const pts = +((sText*(window.W_TEXT||1) + sVisAdj*(window.W_VIS||1))).toFixed(2);
         puntiSec1 += pts;
 
         const studImg = await compositeStudentImage(file).catch(()=> '');
@@ -1606,14 +1612,14 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
         const card = document.createElement('div'); card.className='card';
         const txt = document.createElement('div');
         const badgeTxt = sText>=0.9?'ok':(sText>=0.5?'warn':'err');
-        const badgeVis = sVis>=0.9?'ok':(sVis>=0.5?'warn':'err');
+        const badgeVis = sVisAdj>=0.9?'ok':(sVisAdj>=0.5?'warn':'err');
 
         txt.innerHTML = `
           <div><strong>${esc(file.replace('.jpg',''))}</strong></div>
           <div>🧠 Sezione 1 (max 2):
             <span class="badge ${badgeTxt}" title="testo">${(sText*(window.W_TEXT||1)).toFixed(2)} / ${(window.W_TEXT||1)}</span>
             +
-            <span class="badge ${badgeVis}" title="overlay visivo">${(sVis*(window.W_VIS||1)).toFixed(2)} / ${(window.W_VIS||1)}</span>
+            <span class="badge ${badgeVis}" title="overlay visivo">${(sVisAdj*(window.W_VIS||1)).toFixed(2)} / ${(window.W_VIS||1)}</span>
             =
             <span class="badge ${pts>=1.5?'ok':(pts>=1?'warn':'err')}">${pts.toFixed(2)} / 2.00</span>
           </div>
@@ -1632,9 +1638,7 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
           const i1=new Image(); i1.src=studImg; i1.alt='Annotazione studente'; imgs.appendChild(i1);
         }
 
-        const refList = teacherList.length
-          ? teacherList
-          : (Array.isArray(correctImagesAnnota[file]) ? correctImagesAnnota[file] : [correctImagesAnnota[file]]);
+        const refList = Array.isArray(correctImagesAnnota[file]) ? correctImagesAnnota[file] : [correctImagesAnnota[file]];
         refList.forEach((url,idx)=>{
           if(!url) return;
           const i2=new Image();
@@ -1675,29 +1679,18 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
         let studPNG = '';
         try{ if (payload) studPNG = renderBuildSnapshot(payload, 800, 500); }catch(_){ studPNG=''; }
 
-        let sOverlay = 0;
-        let teacherList2 = [];
+        let sOverlayRaw = 0;
         try{
           const sols = q.correctImg;
           if (studPNG && sols){
             const res2 = await bestOverlapFromList(studPNG, Array.isArray(sols)? sols : [sols]);
-            sOverlay = res2.score;
-
-            const ranked2 = (res2.ranked || []);
-            const bestScore2 = res2.score;
-            ranked2.forEach(r=>{
-              if (r.score >= Math.max(0.6, bestScore2*0.9)){
-                teacherList2.push(r.url);
-              }
-            });
-            if (!teacherList2.length){
-              const fb = res2.url || (Array.isArray(sols) ? sols[0] : sols);
-              if (fb) teacherList2.push(fb);
-            }
+            sOverlayRaw = res2.score;
           }
-        }catch(_){ sOverlay = 0; }
+        }catch(_){ sOverlayRaw = 0; }
 
-        let pts = hasAnyContent ? sOverlay : 0;
+        const sOverlayAdj = calibrateVisual(sOverlayRaw);
+
+        let pts = hasAnyContent ? sOverlayAdj : 0;
         pts = +pts.toFixed(2);
         puntiSec2 += pts;
 
@@ -1715,9 +1708,7 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
           const i1=new Image(); i1.src=studPNG; i1.alt='Soluzione studente'; imgs.appendChild(i1);
         }
 
-        const refList2 = teacherList2.length
-          ? teacherList2
-          : (Array.isArray(q.correctImg)? q.correctImg : [q.correctImg]);
+        const refList2 = Array.isArray(q.correctImg)? q.correctImg : [q.correctImg];
         refList2.forEach((url,idx2)=>{
           if(!url) return;
           const sol=new Image();
