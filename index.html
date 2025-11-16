@@ -79,7 +79,7 @@
   #pinBox h3{ margin:0 0 8px; }
   #pinErr{ color:#c62828; min-height:18px; font-size:13px; }
 
-  /* Firma digitale singola (footer) - ora non è più fixed a schermo */
+  /* Firma digitale singola (footer) - non fixed su schermo, solo in stampa */
   .lg-sign{
     text-align:center;
     color:#2e7d32;
@@ -623,7 +623,7 @@ nums1.addEventListener('mousemove',e=>{
   };
 
   const questions = [
-    {testo:"Costruisci: 3,3-dibromo-1,1,5,5-tetracloropentano",correctImg:["costruzione_1_corretto_A.png","costruzione_1_corretto_B.png"]},
+    {testo:"Costruisci: 3,3-dibromo-1,1,5,5-tetracloropentano",correctImg:["costruzione_1_corretto.png"]},
     {testo:"Costruisci: 1-cloro-4,4-dimetil-2-esino",correctImg:["costruzione_2_corretto_A.png","costruzione_2_corretto_B.png"]},
     {testo:"Costruisci: 1-bromo-3-etil-4-metil-3-esene",correctImg:["costruzione_3_corretto_A.png","costruzione_3_corretto_B.png"]}
   ];
@@ -776,7 +776,7 @@ nums1.addEventListener('mousemove',e=>{
   function rebuildGroups(){
     const n = pieces.length;
     const visited = new Array(n).fill(false);
-    let g = nextGroupId; // usa nuovi id
+    let g = nextGroupId;
     for(let i=0;i<n;i++){
       if (visited[i]) continue;
       const compIdx = [];
@@ -893,12 +893,11 @@ nums1.addEventListener('mousemove',e=>{
     ctx.font='bold 16px Arial';
     numbers2.forEach(n => { ctx.fillText(n.text, n.x-4, n.y+6); });
 
-    /* disegna effetti snap */
     if (snapEffects.length){
       const now=performance.now();
       for(let i=snapEffects.length-1;i>=0;i--){
         const fx=snapEffects[i];
-        const t=(now - fx.start)/260; // 260ms
+        const t=(now - fx.start)/260;
         if (t>=1){ snapEffects.splice(i,1); continue; }
         const r = 4 + 12*t, alpha = 1 - t;
         ctx.beginPath(); ctx.arc(fx.x, fx.y, r, 0, Math.PI*2);
@@ -964,8 +963,8 @@ nums1.addEventListener('mousemove',e=>{
         if (selected && selected.id===p.id) selected=null;
         unlinkPieceById(p.id);
         pieces.splice(i,1);
-        sanitizeGraph();   // pulisci collegamenti
-        rebuildGroups();   // *** fix: assicura nuovi groupId coerenti ***
+        sanitizeGraph();
+        rebuildGroups();
         draw();
         saveWorkForQuestion();
         return;
@@ -1271,7 +1270,7 @@ nums1.addEventListener('mousemove',e=>{
     best.A.engaged[best.aKey] = true;
     best.B.engaged[best.bKey] = true;
 
-    addSnapEffect(best.bPt.x, best.bPt.y); // effetto
+    addSnapEffect(best.bPt.x, best.bPt.y);
     sanitizeGraph();
     saveWorkForQuestion();
   }
@@ -1316,7 +1315,6 @@ function maskFromNonWhite(img, whiteTol=250){
   }
   return {mask:out,width,height};
 }
-/* MAGGIORE TOLLERANZA: steps=4 */
 function dilateN(mask,w,h,steps=4){
   let cur = mask;
   const N = [-w-1,-w,-w+1,-1,0,1,w-1,w,w+1];
@@ -1346,16 +1344,14 @@ function diceScore(A,B){
   if(a+b===0) return 1;
   return (2*tp)/(a+b);
 }
-/* NORMALIZZAZIONE + BOOST DEI VALORI MEDI */
+/* NORMALIZZAZIONE: un po' più severa sulla fascia media */
 function normalizeDice(raw){
   if (raw <= 0) return 0;
-
-  // prima normalizziamo come prima (0.45 ~ soluzione buona)
-  const base = raw / 0.45;
+  // per avere 1 servono ~0.5 di sovrapposizione "grezza"
+  const base = raw / 0.5;
   const clipped = Math.max(0, Math.min(1, base));
-
-  // gamma < 1 => valori medi (0.3–0.6) vengono alzati
-  const gamma = 0.6;
+  // gamma > 0.6 => meno boost ai valori medi
+  const gamma = 0.8;
   return Math.pow(clipped, gamma);
 }
 async function scoreStrokesOverlap(studentPNG, teacherPngUrl){
@@ -1371,14 +1367,22 @@ async function scoreStrokesOverlap(studentPNG, teacherPngUrl){
   const norm = normalizeDice(raw);
   return norm;
 }
+/* ora ritorniamo anche la lista dei punteggi per ogni maschera */
 async function bestOverlapFromList(studentDataUrl, teacherUrls){
   const urls = Array.isArray(teacherUrls) ? teacherUrls : [teacherUrls].filter(Boolean);
-  let best = {score:0, url:(urls[0]||'')};
-  for(const u of urls){
+  let bestScore = 0;
+  let bestUrl = urls[0] || '';
+  const ranked = [];
+  for (const u of urls){
     const s = await scoreStrokesOverlap(studentDataUrl, u);
-    if(s > best.score) best = {score:s, url:u};
+    ranked.push({url:u, score:s});
+    if(s > bestScore){
+      bestScore = s;
+      bestUrl = u;
+    }
   }
-  return best;
+  ranked.sort((a,b)=>b.score-a.score);
+  return {score:bestScore, url:bestUrl, ranked};
 }
 
 /* Sez.1 PNG display */
@@ -1567,15 +1571,27 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
 
         const key = (window.answerKeys||{})[file];
         const studOverlay = await studentOverlayOnlyPNG(file).catch(()=> '');
-        let sVis=0, chosenMask='';
+        let sVis=0;
+        let teacherList = [];
         const hasContent = !!studOverlay;
 
         if (hasContent && key && key.masks){
           const res = await bestOverlapFromList(studOverlay, key.masks);
           sVis = res.score;
-          chosenMask = res.url || (Array.isArray(key.masks) ? key.masks[0] : key.masks);
+
+          const ranked = (res.ranked || []);
+          const bestScore = res.score;
+          ranked.forEach(r=>{
+            if (r.score >= Math.max(0.6, bestScore*0.9)){
+              teacherList.push(r.url);
+            }
+          });
+          if (!teacherList.length){
+            const fallback = res.url || (Array.isArray(key.masks) ? key.masks[0] : key.masks);
+            if (fallback) teacherList.push(fallback);
+          }
         } else {
-          sVis = 0; // senza tratti/numero => 0
+          sVis = 0;
         }
 
         const pts = +((sText*(window.W_TEXT||1) + sVis*(window.W_VIS||1))).toFixed(2);
@@ -1608,9 +1624,20 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
         `;
 
         const imgs = document.createElement('div'); imgs.className='wide';
-        if (studImg){ const i1=new Image(); i1.src=studImg; i1.alt='Annotazione studente'; imgs.appendChild(i1); }
-        const i2=new Image(); i2.src=chosenMask || (Array.isArray(correctImagesAnnota[file]) ? correctImagesAnnota[file][0] : correctImagesAnnota[file]) || '';
-        i2.alt='Soluzione corretta'; imgs.appendChild(i2);
+        if (studImg){
+          const i1=new Image(); i1.src=studImg; i1.alt='Annotazione studente'; imgs.appendChild(i1);
+        }
+
+        const refList = teacherList.length
+          ? teacherList
+          : (Array.isArray(correctImagesAnnota[file]) ? correctImagesAnnota[file] : [correctImagesAnnota[file]]);
+        refList.forEach((url,idx)=>{
+          if(!url) return;
+          const i2=new Image();
+          i2.src=url;
+          i2.alt='Soluzione corretta '+(idx+1);
+          imgs.appendChild(i2);
+        });
 
         card.appendChild(txt); card.appendChild(imgs);
         cont1.appendChild(card);
@@ -1625,7 +1652,7 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
     cont2.innerHTML='';
 
     const questions=[
-      {testo:"Costruisci: 3,3-dibromo-1,1,5,5-tetracloropentano", correctImg:["costruzione_1_corretto_A.png","costruzione_1_corretto_B.png"]},
+      {testo:"Costruisci: 3,3-dibromo-1,1,5,5-tetracloropentano", correctImg:["costruzione_1_corretto.png"]},
       {testo:"Costruisci: 1-cloro-4,4-dimetil-2-esino",            correctImg:["costruzione_2_corretto_A.png","costruzione_2_corretto_B.png"]},
       {testo:"Costruisci: 1-bromo-3-etil-4-metil-3-esene",         correctImg:["costruzione_3_corretto_A.png","costruzione_3_corretto_B.png"]}
     ];
@@ -1644,13 +1671,25 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
         let studPNG = '';
         try{ if (payload) studPNG = renderBuildSnapshot(payload, 800, 500); }catch(_){ studPNG=''; }
 
-        let sOverlay = 0, chosenSol = '';
+        let sOverlay = 0;
+        let teacherList2 = [];
         try{
           const sols = q.correctImg;
           if (studPNG && sols){
             const res2 = await bestOverlapFromList(studPNG, Array.isArray(sols)? sols : [sols]);
             sOverlay = res2.score;
-            chosenSol = res2.url || (Array.isArray(sols)? sols[0] : sols);
+
+            const ranked2 = (res2.ranked || []);
+            const bestScore2 = res2.score;
+            ranked2.forEach(r=>{
+              if (r.score >= Math.max(0.6, bestScore2*0.9)){
+                teacherList2.push(r.url);
+              }
+            });
+            if (!teacherList2.length){
+              const fb = res2.url || (Array.isArray(sols) ? sols[0] : sols);
+              if (fb) teacherList2.push(fb);
+            }
           }
         }catch(_){ sOverlay = 0; }
 
@@ -1668,9 +1707,20 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
         `;
 
         const imgs = document.createElement('div'); imgs.className='wide';
-        if (studPNG){ const i1=new Image(); i1.src=studPNG; i1.alt='Soluzione studente'; imgs.appendChild(i1); }
-        const sol=new Image(); sol.src=chosenSol || (Array.isArray(q.correctImg)? q.correctImg[0] : q.correctImg) || '';
-        sol.alt='Soluzione corretta'; imgs.appendChild(sol);
+        if (studPNG){
+          const i1=new Image(); i1.src=studPNG; i1.alt='Soluzione studente'; imgs.appendChild(i1);
+        }
+
+        const refList2 = teacherList2.length
+          ? teacherList2
+          : (Array.isArray(q.correctImg)? q.correctImg : [q.correctImg]);
+        refList2.forEach((url,idx2)=>{
+          if(!url) return;
+          const sol=new Image();
+          sol.src=url;
+          sol.alt='Soluzione corretta '+(idx2+1);
+          imgs.appendChild(sol);
+        });
 
         card.appendChild(txt); card.appendChild(imgs);
         cont2.appendChild(card);
@@ -1692,7 +1742,6 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
 
     document.getElementById('resultSection').style.display='block';
 
-    // Mostra overlay PIN, blur e blocco
     pinErr.textContent = '';
     pinInput.value = '';
     pinOverlay.style.display='flex';
