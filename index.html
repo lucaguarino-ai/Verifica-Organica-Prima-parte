@@ -623,7 +623,7 @@ nums1.addEventListener('mousemove',e=>{
   };
 
   const questions = [
-    {testo:"Costruisci: 3,3-dibromo-1,1,5,5-tetracloropentano",correctImg:["costruzione_1_corretto.png"]},
+    {testo:"Costruisci: 3,3-dibromo-1,1,5,5-tetracloropentano",correctImg:["costruzione_1_corretto_A.png","costruzione_1_corretto_B.png"]},
     {testo:"Costruisci: 1-cloro-4,4-dimetil-2-esino",correctImg:["costruzione_2_corretto_A.png","costruzione_2_corretto_B.png"]},
     {testo:"Costruisci: 1-bromo-3-etil-4-metil-3-esene",correctImg:["costruzione_3_corretto_A.png","costruzione_3_corretto_B.png"]}
   ];
@@ -1315,7 +1315,7 @@ function maskFromNonWhite(img, whiteTol=250){
   }
   return {mask:out,width,height};
 }
-function dilateN(mask,w,h,steps=4){
+function dilateN(mask,w,h,steps=3){
   let cur = mask;
   const N = [-w-1,-w,-w+1,-1,0,1,w-1,w,w+1];
   for(let s=0;s<steps;s++){
@@ -1344,16 +1344,21 @@ function diceScore(A,B){
   if(a+b===0) return 1;
   return (2*tp)/(a+b);
 }
-/* NORMALIZZAZIONE: un po' più severa sulla fascia media */
-function normalizeDice(raw){
+
+/* Mappatura più severa sulla fascia media.
+   - raw >= 0.8  => 1 pieno
+   - raw medio   => schiacciato verso il basso (0.4–0.6)
+*/
+function mapDice(raw){
   if (raw <= 0) return 0;
-  // per avere 1 servono ~0.5 di sovrapposizione "grezza"
-  const base = raw / 0.5;
-  const clipped = Math.max(0, Math.min(1, base));
-  // gamma > 0.6 => meno boost ai valori medi
-  const gamma = 0.8;
-  return Math.pow(clipped, gamma);
+  if (raw >= 0.8) return 1;
+  const pivot = 0.8;
+  const num = Math.pow(raw, 1.5);
+  const den = Math.pow(pivot, 1.5);
+  const v = num / den;
+  return Math.max(0, Math.min(1, v));
 }
+
 async function scoreStrokesOverlap(studentPNG, teacherPngUrl){
   const stud = await dataUrlToImageData(studentPNG);
   if(!stud) return 0;
@@ -1361,12 +1366,13 @@ async function scoreStrokesOverlap(studentPNG, teacherPngUrl){
   if(!teach) return 0;
   const A = maskFromNonWhite(stud, 250);
   const B = maskFromNonWhite(teach, 250);
-  const Ad = dilateN(A.mask, A.width, A.height, 4);
-  const Bd = dilateN(B.mask, B.width, B.height, 4);
+  const Ad = dilateN(A.mask, A.width, A.height, 3);
+  const Bd = dilateN(B.mask, B.width, B.height, 3);
   const raw = diceScore(Ad, Bd);
-  const norm = normalizeDice(raw);
+  const norm = mapDice(raw);
   return norm;
 }
+
 /* ora ritorniamo anche la lista dei punteggi per ogni maschera */
 async function bestOverlapFromList(studentDataUrl, teacherUrls){
   const urls = Array.isArray(teacherUrls) ? teacherUrls : [teacherUrls].filter(Boolean);
@@ -1652,7 +1658,7 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
     cont2.innerHTML='';
 
     const questions=[
-      {testo:"Costruisci: 3,3-dibromo-1,1,5,5-tetracloropentano", correctImg:["costruzione_1_corretto.png"]},
+      {testo:"Costruisci: 3,3-dibromo-1,1,5,5-tetracloropentano", correctImg:["costruzione_1_corretto_A.png","costruzione_1_corretto_B.png"]},
       {testo:"Costruisci: 1-cloro-4,4-dimetil-2-esino",            correctImg:["costruzione_2_corretto_A.png","costruzione_2_corretto_B.png"]},
       {testo:"Costruisci: 1-bromo-3-etil-4-metil-3-esene",         correctImg:["costruzione_3_corretto_A.png","costruzione_3_corretto_B.png"]}
     ];
