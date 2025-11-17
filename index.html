@@ -1786,68 +1786,82 @@ function scoreQ1(atoms, adj, numsArr){
 
   // VINCOLO 1: catena principale a 5 carboni
   tot++;
-  if (chain.length === 5) ok++;
+  const chainLenScore = (chain.length === 5) ? 1 : 0;
+  if (chainLenScore === 1) ok++;
 
   const bonds = getChainBonds(chain, adj);
 
   // VINCOLO 2: solo legami semplici nella catena principale
   tot++;
   const anyMultiple = bonds.some(b => b.order > 1);
-  if (!anyMultiple) ok++;
+  const satScore = anyMultiple ? 0 : 1; // 1 se tutti semplici
+  if (satScore === 1) ok++;
 
-  // VINCOLI SOSTITUENTI:
-  //  - C1: 2 Cl
-  //  - C3: 2 Br
-  //  - C5: 2 Cl
-  function checkOrientation(orientedChain){
-    let okLocal = 0, totLocal = 0;
-    if (orientedChain.length < 5) return {ok:0, tot:0};
+  // VINCOLO 3: numero di alogeni complessivo (Cl + Br) vicino a 8
+  // guardiamo solo atomi in catena + i loro vicini immediati
+  let haloCount = 0;
+  const chainSet = new Set(chain);
 
-    const h1 = countHalogensAtPos(atoms, adj, orientedChain, 0); // C1
-    const h3 = countHalogensAtPos(atoms, adj, orientedChain, 2); // C3
-    const h5 = countHalogensAtPos(atoms, adj, orientedChain, 4); // C5
+  chain.forEach(id => {
+    const at = atoms[id];
+    if (!at) return;
+    // se questo pezzo è Cl o Br da solo (caso limite)
+    if (at.kind === 'Cl' || at.kind === 'Br'){
+      haloCount++;
+    }
+    // guarda vicini
+    const neigh = adj[id] || [];
+    neigh.forEach(nbId => {
+      const nb = atoms[nbId];
+      if (!nb) return;
+      if (nb.kind === 'Cl' || nb.kind === 'Br') haloCount++;
+    });
+  });
 
-    // Cl a C1 (almeno 2)
-    totLocal++;
-    if ((h1.Cl || 0) >= 2) okLocal++;
-
-    // Cl a C5 (almeno 2)
-    totLocal++;
-    if ((h5.Cl || 0) >= 2) okLocal++;
-
-    // Br a C3 (almeno 2)
-    totLocal++;
-    if ((h3.Br || 0) >= 2) okLocal++;
-
-    return {ok:okLocal, tot:totLocal};
-  }
-
-  const forward  = checkOrientation(chain);
-  const backward = checkOrientation([...chain].reverse());
-
-  const bestSubsOk  = Math.max(forward.ok, backward.ok);
-  const bestSubsTot = Math.max(forward.tot, backward.tot);
-
-  ok  += bestSubsOk;
-  tot += bestSubsTot;
-
-  // punteggio base (solo struttura)
-  let baseRaw = constraintScore(ok, tot);   // 0..1
-  let base;
-
-  // Se la struttura soddisfa la gran parte dei vincoli (≥ 0.8) → la consideriamo "corretta"
-  // e saturiamo il punteggio strutturale a 1.
-  if (baseRaw >= 0.8){
-    base = 1;
+  // vogliamo 6 alogeni in totale (2 Br + 4 Cl) → costruiamo un punteggio tra 0 e 1
+  // 6 → 1
+  // 5 → alto
+  // 3–4 → medio-basso
+  // meno di 3 → basso
+  const targetHalos = 6;
+  let haloScore = 0;
+  if (haloCount >= targetHalos){
+    haloScore = 1;
   } else {
-    // per strutture parziali usiamo ancora la calibrazione dolce che tira un po' su i medi
-    base = Math.pow(baseRaw, 0.6);
+    haloScore = haloCount / targetHalos; // lineare 0..1
   }
 
-  // bonus/penalità numerazione
+  // aggiungiamo questo vincolo al conteggio "ok/tot" per coerenza
+  tot++;
+  // consideriamo "accettabile" se almeno 5 alogeni
+  if (haloCount >= 5) ok++;
+
+  // punteggio base grezzo da vincoli strutturali (0..1)
+  let baseRaw = constraintScore(ok, tot);
+
+  // mischiamo baseRaw e haloScore in modo morbido:
+  // baseStruct = 0.4*chainLen + 0.2*sat + 0.4*haloScore
+  const baseStruct =
+    0.4*chainLenScore +
+    0.2*satScore +
+    0.4*haloScore;
+
+  // usiamo la misura più favorevole tra questi due modi di vedere la struttura
+  baseRaw = Math.max(baseRaw, baseStruct);
+
+  // se la struttura è "molto buona" (catena giusta, saturazione giusta, tanti alogeni),
+  // saturiamo a 1
+  if (chainLenScore === 1 && satScore === 1 && haloScore >= 0.9){
+    baseRaw = 1;
+  }
+
+  // piccola calibrazione dolce per non tenere troppo basse le strutture decenti
+  let base = Math.pow(baseRaw, 0.7); // 0.7 è un po' meno aggressivo di 0.6
+
+  // bonus/penalità numerazione (orientativa + posizione)
   const numBonus = scoreNumerazioneSoft(chain, atoms, numsArr || []);
 
-  // applichiamo bonus soft e limitiamo tra 0 e 1
+  // sommiamo e limitiamo tra 0 e 1
   let final = base + numBonus;
   if (final < 0) final = 0;
   if (final > 1) final = 1;
