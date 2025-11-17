@@ -1313,7 +1313,7 @@ function maskFromNonWhite(img, whiteTol=250){
   }
   return {mask:out,width,height};
 }
-function dilateN(mask,w,h,steps=5){
+function dilateN(mask,w,h,steps=6){
   let cur = mask;
   const N = [-w-1,-w,-w+1,-1,0,1,w-1,w,w+1];
   for(let s=0;s<steps;s++){
@@ -1799,8 +1799,6 @@ function scoreQ1(atoms, adj, numsArr){
   //  - C1: 2 Cl
   //  - C3: 2 Br
   //  - C5: 2 Cl
-  // Controlliamo considerando anche alberi piccoli collegati.
-
   function checkOrientation(orientedChain){
     let okLocal = 0, totLocal = 0;
     if (orientedChain.length < 5) return {ok:0, tot:0};
@@ -1827,7 +1825,6 @@ function scoreQ1(atoms, adj, numsArr){
   const forward  = checkOrientation(chain);
   const backward = checkOrientation([...chain].reverse());
 
-  // prendiamo l'orientamento che rispetta più vincoli di sostituenti
   const bestSubsOk  = Math.max(forward.ok, backward.ok);
   const bestSubsTot = Math.max(forward.tot, backward.tot);
 
@@ -1850,7 +1847,7 @@ function scoreQ1(atoms, adj, numsArr){
 
 // ===== valutazione domanda 2 =====
 // 1-cloro-4,4-dimetil-2-esino
-function scoreQ1(atoms, adj, numsArr){
+function scoreQ2(atoms, adj, numsArr){
   const chain = findMainChain(atoms, adj);
   let ok = 0, tot = 0;
 
@@ -1866,7 +1863,6 @@ function scoreQ1(atoms, adj, numsArr){
   if (tripleEdges.length > 0) ok++;
 
   // VINCOLO 3: il triplo è in posizione 2 (IUPAC)
-  // se ce ne sono più di uno, ci accontentiamo che uno sia al 2
   tot++;
   let pos2Ok = false;
   tripleEdges.forEach(e=>{
@@ -1878,7 +1874,6 @@ function scoreQ1(atoms, adj, numsArr){
   // VINCOLI SOSTITUENTI:
   // - 1-cloro: Cl sul C1
   // - 4,4-dimetil: due metili sul C4
-
   function checkOrientation(orientedChain){
     let okLocal = 0, totLocal = 0;
     if (orientedChain.length < 4) return {ok:0, tot:0};
@@ -1916,7 +1911,7 @@ function scoreQ1(atoms, adj, numsArr){
 
 // ===== valutazione domanda 3 =====
 // 1-bromo-3-etil-4-metil-3-esene
-function scoreQ1(atoms, adj, numsArr){
+function scoreQ3(atoms, adj, numsArr){
   const chain = findMainChain(atoms, adj);
   let ok = 0, tot = 0;
 
@@ -1944,7 +1939,6 @@ function scoreQ1(atoms, adj, numsArr){
   // - 1-bromo
   // - 3-etil
   // - 4-metil
-
   function checkOrientation(orientedChain){
     let okLocal = 0, totLocal = 0;
     if (orientedChain.length < 4) return {ok:0, tot:0};
