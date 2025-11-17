@@ -1350,38 +1350,31 @@ function mapDice(raw){
   return raw;
 }
 
-// Nuova calibrazione didattica:
-// - 0.80–1.00  → 1 pieno
-// - 0.70–0.80  → 0.90–1.00 (zone molto buone)
-// - 0.55–0.70  → 0.50–0.90 (medio-alte, ma non perfette)
-// - 0.35–0.55  → 0.20–0.50 (parzialmente corrette)
-// - < 0.35     → molto basse
+// Nuova calibrazione didattica (più generosa in alto):
+// - r ≥ 0.60  → 1 pieno
+// - 0.45–0.60 → 0.70–1.00
+// - 0.30–0.45 → 0.30–0.70
+// - < 0.30    → resta basso
 function calibrateVisual(r){
   if (r <= 0) return 0;
 
-  // Overlay davvero buono → voto pieno
-  if (r >= 0.80) return 1;
+  // Fascia alta: overlay già ben sovrapposti → 1 pieno
+  if (r >= 0.60) return 1;
 
-  // 0.70–0.80 → molto vicino a 1
-  if (r >= 0.70){
-    const t = (r - 0.70) / (0.80 - 0.70);     // t ∈ [0,1]
-    return 0.90 + t * 0.10;                  // 0.70 → 0.90 ; 0.80 → 1.00
+  // Fascia medio-alta: 0.45–0.60 → 0.70–1.00
+  if (r >= 0.45){
+    const t = (r - 0.45) / (0.60 - 0.45);   // t ∈ [0,1]
+    return 0.70 + t * 0.30;                // 0.45 → 0.70 ; 0.60 → 1.00
   }
 
-  // 0.55–0.70 → medio-alte (non perfette, ma buone)
-  if (r >= 0.55){
-    const t = (r - 0.55) / (0.70 - 0.55);
-    return 0.50 + t * 0.40;                  // 0.55 → 0.50 ; 0.70 → 0.90
+  // Fascia media: 0.30–0.45 → 0.30–0.70
+  if (r >= 0.30){
+    const t = (r - 0.30) / (0.45 - 0.30);   // t ∈ [0,1]
+    return 0.30 + t * 0.40;                // 0.30 → 0.30 ; 0.45 → 0.70
   }
 
-  // 0.35–0.55 → abbastanza errori, ma qualcosa c'è
-  if (r >= 0.35){
-    const t = (r - 0.35) / (0.55 - 0.35);
-    return 0.20 + t * 0.30;                  // 0.35 → 0.20 ; 0.55 → 0.50
-  }
-
-  // < 0.35 → struttura molto diversa
-  return r * 0.2;
+  // Fascia bassa: < 0.30 → non la “spariamo” su
+  return r; // o, se vuoi essere ancora più severo: return r * 0.8;
 }
 
 async function scoreStrokesOverlap(studentPNG, teacherPngUrl){
@@ -1726,8 +1719,9 @@ function scoreQ1(atoms, adj){
   const sBackward = subScoreForOrientation([...chain].reverse());
   const subsScore = Math.max(sForward, sBackward); // max 1
 
-  // pesi: lunghezza 0.25, legami 0.25, sostituenti 0.50
-  const total = 0.25*chainLenScore + 0.25*multScore + 0.50*subsScore;
+  // pesi: catena 0.40, legami 0.30, sostituenti 0.30
+  // (così, se catena e saturazione sono corrette, sei già molto in alto)
+  const total = 0.40*chainLenScore + 0.30*multScore + 0.30*subsScore;
   return Math.max(0, Math.min(1, total));
 }
 
@@ -1745,14 +1739,10 @@ function scoreQ2(atoms, adj){
 
   let posScore = 0;
   if (tripleEdges.length){
-    // prendo il triple bond che "fa meglio" con la posizione 2
-    let best = 0;
     tripleEdges.forEach(e=>{
       const pos = computeIupacPosition(chain.length, e.index);
-      if (pos === 2) best = Math.max(best, 1);
-      else if (pos === 3) best = Math.max(best, 0.5); // leggermente spostato
+      if (pos === 2) posScore = 1; // solo posizione 2 dà credito
     });
-    posScore = best;
   }
 
   function subsScoreForOrientation(orientedChain){
@@ -1769,15 +1759,18 @@ function scoreQ2(atoms, adj){
     const metilScore = Math.min(methyl4/2, 1); // due metili → punteggio pieno
 
     // pesi interni: metà Cl, metà metili
-    return 0.5*clScore + 0.5*metilScore;
+    const base = 0.5*clScore + 0.5*metilScore;
+    // resa più severa sui parziali
+    return Math.pow(base, 1.3);
   }
 
   const sForward  = subsScoreForOrientation(chain);
   const sBackward = subsScoreForOrientation([...chain].reverse());
   const subsScore = Math.max(sForward, sBackward);
 
-  // pesi globali: catena 0.3, presenza triplo 0.3, posiz. triplo 0.2, sostituenti 0.2
-  const total = 0.3*chainLenScore + 0.3*hasTripleScore + 0.2*posScore + 0.2*subsScore;
+  // pesi globali (più severi sui dettagli):
+  // catena 0.15, presenza triplo 0.15, posizione 0.30, sostituenti 0.40
+  const total = 0.15*chainLenScore + 0.15*hasTripleScore + 0.30*posScore + 0.40*subsScore;
   return Math.max(0, Math.min(1, total));
 }
 
@@ -1795,13 +1788,10 @@ function scoreQ3(atoms, adj){
 
   let posScore = 0;
   if (doubleEdges.length){
-    let best = 0;
     doubleEdges.forEach(e=>{
       const pos = computeIupacPosition(chain.length, e.index);
-      if (pos === 3) best = Math.max(best, 1);
-      else if (pos === 2 || pos === 4) best = Math.max(best, 0.5);
+      if (pos === 3) posScore = 1; // solo posizione 3
     });
-    posScore = best;
   }
 
   function subsScoreForOrientation(orientedChain){
@@ -1823,15 +1813,16 @@ function scoreQ3(atoms, adj){
     const metilScore = Math.min(met4/1, 1);
 
     // pesi interni: Br 0.3, etil 0.35, metil 0.35
-    return 0.3*brScore + 0.35*etilScore + 0.35*metilScore;
+    const base = 0.3*brScore + 0.35*etilScore + 0.35*metilScore;
+    return Math.pow(base, 1.3); // parziali più “puniti”
   }
 
   const sForward  = subsScoreForOrientation(chain);
   const sBackward = subsScoreForOrientation([...chain].reverse());
   const subsScore = Math.max(sForward, sBackward);
 
-  // pesi globali: catena 0.25, presenza doppio 0.25, posizione 0.20, sostituenti 0.30
-  const total = 0.25*chainLenScore + 0.25*hasDoubleScore + 0.20*posScore + 0.30*subsScore;
+  // pesi globali: catena 0.15, doppio 0.15, posizione 0.30, sostituenti 0.40
+  const total = 0.15*chainLenScore + 0.15*hasDoubleScore + 0.30*posScore + 0.40*subsScore;
   return Math.max(0, Math.min(1, total));
 }
 
@@ -1945,9 +1936,18 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
     cont2.innerHTML='';
 
     const questions=[
-      {testo:"Costruisci: 3,3-dibromo-1,1,5,5-tetracloropentano"},
-      {testo:"Costruisci: 1-cloro-4,4-dimetil-2-esino"},
-      {testo:"Costruisci: 1-bromo-3-etil-4-metil-3-esene"}
+      {
+        testo:"Costruisci: 3,3-dibromo-1,1,5,5-tetracloropentano",
+        correctImg:["costruzione_1_corretto_A.png","costruzione_1_corretto_B.png"]
+      },
+      {
+        testo:"Costruisci: 1-cloro-4,4-dimetil-2-esino",
+        correctImg:["costruzione_2_corretto_A.png","costruzione_2_corretto_B.png"]
+      },
+      {
+        testo:"Costruisci: 1-bromo-3-etil-4-metil-3-esene",
+        correctImg:["costruzione_3_corretto_A.png","costruzione_3_corretto_B.png"]
+      }
     ];
 
     for (let idx=0; idx<questions.length; idx++){
@@ -1989,6 +1989,16 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
         if (studPNG){
           const i1=new Image(); i1.src=studPNG; i1.alt='Soluzione studente'; imgs.appendChild(i1);
         }
+
+        // Immagini di riferimento del docente
+        const sols = Array.isArray(q.correctImg) ? q.correctImg : (q.correctImg ? [q.correctImg] : []);
+        sols.forEach((url, iSol)=>{
+          if (!url) return;
+          const ref = new Image();
+          ref.src = url;
+          ref.alt = 'Soluzione corretta ' + (iSol+1);
+          imgs.appendChild(ref);
+        });
 
         card.appendChild(txt); 
         card.appendChild(imgs);
