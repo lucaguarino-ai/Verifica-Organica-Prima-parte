@@ -1313,7 +1313,7 @@ function maskFromNonWhite(img, whiteTol=250){
   }
   return {mask:out,width,height};
 }
-function dilateN(mask,w,h,steps=4){
+function dilateN(mask,w,h,steps=5){
   let cur = mask;
   const N = [-w-1,-w,-w+1,-1,0,1,w-1,w,w+1];
   for(let s=0;s<steps;s++){
@@ -1689,9 +1689,98 @@ function constraintScore(okCount, totalCount){
   return okCount / totalCount;
 }
 
+// -------------------------------------------------------
+// VINCOLO SOFT: numerazione orientativa + posizione
+// chain  = array di id atomi nella catena principale (ordine trovato dall'algoritmo)
+// atoms  = dizionario { id -> pezzo } con x,y,w,h
+// numsArr = array di oggetti { x, y, text } (numbers2)
+// Restituisce: +0.2 se numerazione corretta (orientamento + posizione), -0.2 se errata, 0 se non valutabile
+// -------------------------------------------------------
+function scoreNumerazioneSoft(chain, atoms, numsArr){
+  if (!numsArr || numsArr.length === 0) return 0; // niente numerazione → neutro
+  if (!chain || chain.length === 0) return 0;     // niente catena → neutro
+
+  // 1) ordino i numeri da sinistra a destra
+  const rawNums = numsArr
+    .map(n => ({
+      x: n.x,
+      y: n.y,
+      value: Number(n.text)
+    }))
+    .filter(n => !isNaN(n.value));
+
+  if (rawNums.length === 0) return 0;
+
+  rawNums.sort((a,b) => a.x - b.x);
+
+  const L = chain.length;
+
+  // Se il numero di etichette è diverso dal numero di C in catena → consideriamo numerazione non corretta
+  if (rawNums.length !== L) return -0.2;
+
+  // 2) per ogni numero, trova il carbonio di catena più vicino
+  const numToAtom = rawNums.map(num => {
+    let bestIdx = -1;
+    let bestDist = Infinity;
+    for (let ci = 0; ci < chain.length; ci++){
+      const atomId = chain[ci];
+      const at = atoms[atomId];
+      if (!at) continue;
+      const cx = at.x + (at.w || 0)/2;
+      const cy = at.y + (at.h || 0)/2;
+      const dx = num.x - cx;
+      const dy = num.y - cy;
+      const d  = Math.hypot(dx, dy);
+      if (d < bestDist){
+        bestDist = d;
+        bestIdx = ci;
+      }
+    }
+    return {
+      value: num.value,      // numero scritto (1,2,3,…)
+      chainIndex: bestIdx,   // indice nella catena principale (0-based)
+      dist: bestDist
+    };
+  });
+
+  // 3) soglia massima di distanza per considerare "vicino" all'atomo corretto
+  const MAX_DIST = 40; // px – se vuoi più severo, abbassa
+
+  // helper per controllare un orientamento (forward o backward)
+  function checkOrientation(forward){
+    let allGood = true;
+    for (let i = 0; i < numToAtom.length; i++){
+      const {value, chainIndex, dist} = numToAtom[i];
+      if (chainIndex < 0 || dist > MAX_DIST){ allGood = false; break; }
+      if (value < 1 || value > L){ allGood = false; break; }
+
+      const expectedIndex = forward
+        ? (value - 1)       // 1 -> 0, 2 -> 1, ...
+        : (L - value);      // orientamento invertito
+
+      if (chainIndex !== expectedIndex){
+        allGood = false;
+        break;
+      }
+    }
+    return allGood;
+  }
+
+  const okForward  = checkOrientation(true);
+  const okBackward = checkOrientation(false);
+
+  if (okForward || okBackward){
+    // numerazione coerente (verso + posizione vicino al C giusto)
+    return +0.2;
+  } else {
+    // numerazione presente ma incoerente
+    return -0.2;
+  }
+}
+
 // ===== valutazione domanda 1 =====
 // 3,3-dibromo-1,1,5,5-tetracloropentano
-function scoreQ1(atoms, adj){
+function scoreQ1(atoms, adj, numsArr){
   const chain = findMainChain(atoms, adj);
   let ok = 0, tot = 0;
 
@@ -1745,12 +1834,23 @@ function scoreQ1(atoms, adj){
   ok  += bestSubsOk;
   tot += bestSubsTot;
 
-  return constraintScore(ok, tot);
+  // punteggio base (solo struttura)
+  let base = constraintScore(ok, tot);
+
+  // bonus/penalità numerazione
+  const numBonus = scoreNumerazioneSoft(chain, atoms, numsArr || []);
+
+  // applichiamo bonus soft e limitiamo tra 0 e 1
+  let final = base + numBonus;
+  if (final < 0) final = 0;
+  if (final > 1) final = 1;
+
+  return final;
 }
 
 // ===== valutazione domanda 2 =====
 // 1-cloro-4,4-dimetil-2-esino
-function scoreQ2(atoms, adj){
+function scoreQ1(atoms, adj, numsArr){
   const chain = findMainChain(atoms, adj);
   let ok = 0, tot = 0;
 
@@ -1804,12 +1904,19 @@ function scoreQ2(atoms, adj){
   ok  += bestSubsOk;
   tot += bestSubsTot;
 
-  return constraintScore(ok, tot);
+  let base = constraintScore(ok, tot);
+  const numBonus = scoreNumerazioneSoft(chain, atoms, numsArr || []);
+
+  let final = base + numBonus;
+  if (final < 0) final = 0;
+  if (final > 1) final = 1;
+
+  return final;
 }
 
 // ===== valutazione domanda 3 =====
 // 1-bromo-3-etil-4-metil-3-esene
-function scoreQ3(atoms, adj){
+function scoreQ1(atoms, adj, numsArr){
   const chain = findMainChain(atoms, adj);
   let ok = 0, tot = 0;
 
@@ -1868,7 +1975,14 @@ function scoreQ3(atoms, adj){
   ok  += bestSubsOk;
   tot += bestSubsTot;
 
-  return constraintScore(ok, tot);
+  let base = constraintScore(ok, tot);
+  const numBonus = scoreNumerazioneSoft(chain, atoms, numsArr || []);
+
+  let final = base + numBonus;
+  if (final < 0) final = 0;
+  if (final > 1) final = 1;
+
+  return final;
 }
 
 document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
@@ -2010,9 +2124,9 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
         if (hasAnyContent){
           const {atoms, adj} = buildAtomGraph(piecesArr);
 
-          if (idx === 0)       pts = scoreQ1(atoms, adj);
-          else if (idx === 1)  pts = scoreQ2(atoms, adj);
-          else if (idx === 2)  pts = scoreQ3(atoms, adj);
+          if (idx === 0)       pts = scoreQ1(atoms, adj, numsArr);
+          else if (idx === 1)  pts = scoreQ2(atoms, adj, numsArr);
+          else if (idx === 2)  pts = scoreQ3(atoms, adj, numsArr);
         }
 
         pts = +pts.toFixed(2);
