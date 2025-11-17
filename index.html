@@ -1773,8 +1773,8 @@ function scoreNumerazioneSoft(chain, atoms, numsArr){
     // numerazione coerente (verso + posizione vicino al C giusto)
     return +0.2;
   } else {
-    // numerazione presente ma incoerente
-    return -0.2;
+    // numerazione presente ma incoerente → niente bonus, niente penalità
+    return 0;
   }
 }
 
@@ -1782,86 +1782,45 @@ function scoreNumerazioneSoft(chain, atoms, numsArr){
 // 3,3-dibromo-1,1,5,5-tetracloropentano
 function scoreQ1(atoms, adj, numsArr){
   const chain = findMainChain(atoms, adj);
-  let ok = 0, tot = 0;
+  const L = chain.length || 0;
 
-  // VINCOLO 1: catena principale a 5 carboni
-  tot++;
-  const chainLenScore = (chain.length === 5) ? 1 : 0;
-  if (chainLenScore === 1) ok++;
+  // 1) PUNTEGGIO CATENA
+  // vogliamo una catena principale di almeno 5 C.
+  // Se L >= 5 → 1, altrimenti cresce linearmente (es. L=3 → 0.6)
+  let chainLenScore = 0;
+  if (L >= 5) {
+    chainLenScore = 1;
+  } else {
+    chainLenScore = L / 5;
+  }
 
-  const bonds = getChainBonds(chain, adj);
-
-  // VINCOLO 2: solo legami semplici nella catena principale
-  tot++;
-  const anyMultiple = bonds.some(b => b.order > 1);
-  const satScore = anyMultiple ? 0 : 1; // 1 se tutti semplici
-  if (satScore === 1) ok++;
-
-  // VINCOLO 3: numero di alogeni complessivo (Cl + Br) vicino a 8
-  // guardiamo solo atomi in catena + i loro vicini immediati
-  let haloCount = 0;
-  const chainSet = new Set(chain);
-
-  chain.forEach(id => {
-    const at = atoms[id];
-    if (!at) return;
-    // se questo pezzo è Cl o Br da solo (caso limite)
-    if (at.kind === 'Cl' || at.kind === 'Br'){
-      haloCount++;
-    }
-    // guarda vicini
-    const neigh = adj[id] || [];
-    neigh.forEach(nbId => {
-      const nb = atoms[nbId];
-      if (!nb) return;
-      if (nb.kind === 'Cl' || nb.kind === 'Br') haloCount++;
-    });
+  // 2) PUNTEGGIO ALOGENI (conteggio globale, non più solo vicini alla catena)
+  let clCount = 0;
+  let brCount = 0;
+  Object.values(atoms).forEach(a => {
+    if (!a || !a.kind) return;
+    if (a.kind === 'Cl') clCount++;
+    if (a.kind === 'Br') brCount++;
   });
 
-  // vogliamo 6 alogeni in totale (2 Br + 4 Cl) → costruiamo un punteggio tra 0 e 1
-  // 6 → 1
-  // 5 → alto
-  // 3–4 → medio-basso
-  // meno di 3 → basso
-  const targetHalos = 6;
-  let haloScore = 0;
-  if (haloCount >= targetHalos){
-    haloScore = 1;
-  } else {
-    haloScore = haloCount / targetHalos; // lineare 0..1
-  }
+  // Struttura corretta: 4 Cl e 2 Br
+  const clScore = Math.min(clCount / 4, 1); // 4 o più Cl → 1
+  const brScore = Math.min(brCount / 2, 1); // 2 o più Br → 1
+  const haloScore = (clScore + brScore) / 2; // media fra Cl e Br
 
-  // aggiungiamo questo vincolo al conteggio "ok/tot" per coerenza
-  tot++;
-  // consideriamo "accettabile" se almeno 5 alogeni
-  if (haloCount >= 5) ok++;
+  // 3) COMBINAZIONE STRUTTURALE
+  // diamo un po' più peso agli alogeni, perché caratterizzano il nome
+  let baseRaw = 0.4 * chainLenScore + 0.6 * haloScore;
+  if (baseRaw > 1) baseRaw = 1;
+  if (baseRaw < 0) baseRaw = 0;
 
-  // punteggio base grezzo da vincoli strutturali (0..1)
-  let baseRaw = constraintScore(ok, tot);
+  // 4) CALIBRAZIONE DOLCE (concava verso l'alto)
+  // così i punteggi medi vengono leggermente alzati
+  let base = Math.pow(baseRaw, 0.8); // 0.8 è una curva morbida
 
-  // mischiamo baseRaw e haloScore in modo morbido:
-  // baseStruct = 0.4*chainLen + 0.2*sat + 0.4*haloScore
-  const baseStruct =
-    0.4*chainLenScore +
-    0.2*satScore +
-    0.4*haloScore;
-
-  // usiamo la misura più favorevole tra questi due modi di vedere la struttura
-  baseRaw = Math.max(baseRaw, baseStruct);
-
-  // se la struttura è "molto buona" (catena giusta, saturazione giusta, tanti alogeni),
-  // saturiamo a 1
-  if (chainLenScore === 1 && satScore === 1 && haloScore >= 0.9){
-    baseRaw = 1;
-  }
-
-  // piccola calibrazione dolce per non tenere troppo basse le strutture decenti
-  let base = Math.pow(baseRaw, 0.7); // 0.7 è un po' meno aggressivo di 0.6
-
-  // bonus/penalità numerazione (orientativa + posizione)
+  // 5) BONUS NUMERAZIONE (solo bonus, nessuna penalità)
   const numBonus = scoreNumerazioneSoft(chain, atoms, numsArr || []);
 
-  // sommiamo e limitiamo tra 0 e 1
   let final = base + numBonus;
   if (final < 0) final = 0;
   if (final > 1) final = 1;
