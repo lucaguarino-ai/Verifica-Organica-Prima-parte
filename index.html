@@ -1313,7 +1313,7 @@ function maskFromNonWhite(img, whiteTol=250){
   }
   return {mask:out,width,height};
 }
-function dilateN(mask,w,h,steps=6){
+function dilateN(mask,w,h,steps=7){
   let cur = mask;
   const N = [-w-1,-w,-w+1,-1,0,1,w-1,w,w+1];
   for(let s=0;s<steps;s++){
@@ -1832,7 +1832,9 @@ function scoreQ1(atoms, adj, numsArr){
   tot += bestSubsTot;
 
   // punteggio base (solo struttura)
-  let base = constraintScore(ok, tot);
+  let baseRaw = constraintScore(ok, tot);   // 0..1
+  // calibrazione dolce: tira un po' su i punteggi medi (0.2–0.7)
+  let base = Math.pow(baseRaw, 0.6);
 
   // bonus/penalità numerazione
   const numBonus = scoreNumerazioneSoft(chain, atoms, numsArr || []);
@@ -1899,7 +1901,9 @@ function scoreQ2(atoms, adj, numsArr){
   ok  += bestSubsOk;
   tot += bestSubsTot;
 
-  let base = constraintScore(ok, tot);
+  let baseRaw = constraintScore(ok, tot);
+  let base = Math.pow(baseRaw, 0.6);
+
   const numBonus = scoreNumerazioneSoft(chain, atoms, numsArr || []);
 
   let final = base + numBonus;
