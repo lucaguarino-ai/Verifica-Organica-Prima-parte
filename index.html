@@ -1313,7 +1313,7 @@ function maskFromNonWhite(img, whiteTol=250){
   }
   return {mask:out,width,height};
 }
-function dilateN(mask,w,h,steps=7){
+function dilateN(mask,w,h,steps=4){
   let cur = mask;
   const N = [-w-1,-w,-w+1,-1,0,1,w-1,w,w+1];
   for(let s=0;s<steps;s++){
@@ -1350,31 +1350,34 @@ function mapDice(raw){
   return raw;
 }
 
-// Calibrazione overlay più semplice:
-// - r >= 0.80 → 1.00
-// - 0.60–0.80 → 0.70–1.00 (salita moderata)
-// - 0.40–0.60 → 0.40–0.70
-// - < 0.40    → resta basso (moltiplicato)
+// Calibrazione overlay per Sez.1
+// r = Dice grezzo (dopo dilatazione)
+//
+// Idee:
+// - sopra 0.75 consideriamo l'overlay "didatticamente corretto" → 1
+// - 0.55–0.75 → fascia media, sale ma non raggiunge 1
+// - 0.35–0.55 → fascia bassa/media
+// - sotto 0.35 → molto basso
 function calibrateVisual(r){
   if (r <= 0) return 0;
 
-  // Overlay molto buono
-  if (r >= 0.80) return 1;
+  // Fascia alta: overlay davvero buono → diamo 1 pieno
+  if (r >= 0.75) return 1;
 
-  // 0.60–0.80 → da 0.70 a 1.00
-  if (r >= 0.60){
-    const t = (r - 0.60) / (0.80 - 0.60);   // t in [0,1]
-    return 0.70 + t * 0.30;                // 0.60 -> 0.70 ; 0.80 -> 1.00
+  // Fascia medio-alta: 0.55–0.75 → 0.50–1.00
+  if (r >= 0.55){
+    const t = (r - 0.55) / (0.75 - 0.55);   // t ∈ [0,1]
+    return 0.50 + t * 0.50;                // 0.55 → 0.50 ; 0.75 → 1.00
   }
 
-  // 0.40–0.60 → da 0.40 a 0.70
-  if (r >= 0.40){
-    const t = (r - 0.40) / (0.60 - 0.40);   // t in [0,1]
-    return 0.40 + t * 0.30;                // 0.40 -> 0.40 ; 0.60 -> 0.70
+  // Fascia media: 0.35–0.55 → 0.20–0.50
+  if (r >= 0.35){
+    const t = (r - 0.35) / (0.55 - 0.35);   // t ∈ [0,1]
+    return 0.20 + t * 0.30;                // 0.35 → 0.20 ; 0.55 → 0.50
   }
 
-  // < 0.40 → non lo spariamo su
-  return r * 0.5; // es: 0.30 -> 0.15
+  // Fascia bassa: < 0.35 → molto bassa
+  return r * 0.2;
 }
 
 async function scoreStrokesOverlap(studentPNG, teacherPngUrl){
