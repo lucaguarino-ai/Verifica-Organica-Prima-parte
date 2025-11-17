@@ -1351,33 +1351,34 @@ function mapDice(raw){
 }
 
 // Calibrazione overlay per Sez.1
-// r = Dice grezzo (dopo dilatazione)
-//
-// Idee:
-// - sopra 0.75 consideriamo l'overlay "didatticamente corretto" → 1
-// - 0.55–0.75 → fascia media, sale ma non raggiunge 1
-// - 0.35–0.55 → fascia bassa/media
-// - sotto 0.35 → molto basso
+// r = Dice grezzo (0..1) dopo dilatazione
+// Scopo: immagini molto vicine alla soluzione → 1
 function calibrateVisual(r){
-  if (r <= 0) return 0;
+  if (!isFinite(r) || r <= 0) return 0;
 
-  // Fascia alta: overlay davvero buono → diamo 1 pieno
-  if (r >= 0.75) return 1;
-
-  // Fascia medio-alta: 0.55–0.75 → 0.50–1.00
-  if (r >= 0.55){
-    const t = (r - 0.55) / (0.75 - 0.55);   // t ∈ [0,1]
-    return 0.50 + t * 0.50;                // 0.55 → 0.50 ; 0.75 → 1.00
+  // Fascia alta: overlay davvero buono
+  // Tutto ciò che è almeno 0.70 lo consideriamo "didatticamente perfetto"
+  if (r >= 0.70){
+    return 1;
   }
 
-  // Fascia media: 0.35–0.55 → 0.20–0.50
-  if (r >= 0.35){
-    const t = (r - 0.35) / (0.55 - 0.35);   // t ∈ [0,1]
-    return 0.20 + t * 0.30;                // 0.35 → 0.20 ; 0.55 → 0.50
+  // Fascia medio-alta: 0.50–0.70 → 0.70–1.00
+  // 0.50 → 0.70 ; 0.70 → 1.00
+  if (r >= 0.50){
+    const t = (r - 0.50) / (0.70 - 0.50);   // t ∈ [0,1]
+    return 0.70 + t * 0.30;
   }
 
-  // Fascia bassa: < 0.35 → molto bassa
-  return r * 0.2;
+  // Fascia media: 0.30–0.50 → 0.40–0.70
+  // 0.30 → 0.40 ; 0.50 → 0.70
+  if (r >= 0.30){
+    const t = (r - 0.30) / (0.50 - 0.30);   // t ∈ [0,1]
+    return 0.40 + t * 0.30;
+  }
+
+  // Fascia bassa: < 0.30 → molto bassa (compressa)
+  // es. 0.20 → 0.10 ; 0.10 → 0.05
+  return r * 0.5;
 }
 
 async function scoreStrokesOverlap(studentPNG, teacherPngUrl){
@@ -2020,6 +2021,7 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
         }
 
         const sVisAdj = calibrateVisual(sVisRaw);
+        const visScore = sVisAdj;
 
         const pts = +((sText*(window.W_TEXT||1) + sVisAdj*(window.W_VIS||1))).toFixed(2);
         puntiSec1 += pts;
