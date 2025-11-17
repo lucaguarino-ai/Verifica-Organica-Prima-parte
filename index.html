@@ -1359,32 +1359,25 @@ function mapDice(raw){
 function calibrateVisual(r){
   if (r <= 0) return 0;
 
-  // Perfetto / quasi perfetto
-  if (r >= 0.92) return 1;
+  // Tutto ciò che è almeno 0.75 lo consideriamo "didatticamente corretto" -> 1 pieno
+  if (r >= 0.75) return 1;
 
-  // Molto simile ma non perfetto
-  if (r >= 0.80){
-    // 0.80 -> 0.85 ; 0.92 -> 1
-    const t = (r - 0.80) / (0.92 - 0.80);
-    return 0.85 + t * 0.15;
+  // 0.55–0.75 = costruzione quasi corretta / annotazione con pochi errori
+  // 0.55 -> 0.50 ; 0.75 -> 1.00
+  if (r >= 0.55){
+    const t = (r - 0.55) / (0.75 - 0.55);
+    return 0.50 + t * 0.50;
   }
 
-  // Struttura riconoscibile ma con errori / incompleta
-  if (r >= 0.60){
-    // 0.60 -> 0.35 ; 0.80 -> 0.85
-    const t = (r - 0.60) / 0.20;
-    return 0.35 + t * 0.50;
+  // 0.35–0.55 = abbastanza errori, struttura solo parzialmente giusta
+  // 0.35 -> 0.20 ; 0.55 -> 0.50
+  if (r >= 0.35){
+    const t = (r - 0.35) / (0.55 - 0.35);
+    return 0.20 + t * 0.30;
   }
 
-  // Abbastanza diversa
-  if (r >= 0.40){
-    // 0.40 -> 0.20 ; 0.60 -> 0.35
-    const t = (r - 0.40) / 0.20;
-    return 0.20 + t * 0.15;
-  }
-
-  // Molto diversa
-  return r * 0.5;
+  // < 0.35 = molto diversa → rimane molto bassa
+  return r * 0.2;
 }
 
 async function scoreStrokesOverlap(studentPNG, teacherPngUrl){
