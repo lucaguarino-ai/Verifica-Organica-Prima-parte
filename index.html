@@ -268,7 +268,7 @@ function pad(n){return String(n).padStart(2,'0');}
 function fmtHMS(ms){const s=Math.floor(ms/1000);const h=Math.floor(s/3600);const m=Math.floor((s%3600)/60);const ss=s%60;return pad(h)+':'+pad(m)+':'+pad(ss);}
 function nlpSimilarity(a,b){
   a=(a||'').toLowerCase().replace(/[^\wàèéìòóùç\-_,\s]/g,' ').replace(/\s+/g,' ').trim();
-  b=(b||'').toLowerCase().replace(/[^\wàèéìòóùç\-_,\s]/g,' ').replace(/\s+/g,' ').trim();
+  b=(b||'').toLowerCase().replace(/[^\wàèéìòèóùç\-_,\s]/g,' ').replace(/\s+/g,' ').trim();
   if(!a && !b) return 1;
   const A=new Set(a.split(/\s+|-/).filter(Boolean));
   const B=new Set(b.split(/\s+|-/).filter(Boolean));
@@ -772,7 +772,6 @@ nums1.addEventListener('mousemove',e=>{
   function groupMembers(gid){ return pieces.filter(p=>p.groupId===gid); }
   function findIndexById(id){ return pieces.findIndex(p => p.id === id); }
 
-  /* Ricostruisci i groupId in base alle connessioni (fix dopo cancellazioni) */
   function rebuildGroups(){
     const n = pieces.length;
     const visited = new Array(n).fill(false);
@@ -1228,7 +1227,6 @@ nums1.addEventListener('mousemove',e=>{
 
   setQuestion(0);
 
-  /* SNAP: ricerca migliore coppia porte + effetto */
   function trySnapGroup(gid){
     const members = groupMembers(gid);
     let best = null;
@@ -1345,34 +1343,48 @@ function diceScore(A,B){
   return (2*tp)/(a+b);
 }
 
-// Dice "grezza": nessuna compressione qui
+// Dice grezza
 function mapDice(raw){
   if (raw <= 0) return 0;
   if (raw >= 1) return 1;
   return raw;
 }
 
-// Calibrazione didattica:
-// - <=0.30: resta basso
-// - 0.30–0.50: sale verso 0.40–0.80
-// - 0.50–0.80: sale verso 0.80–1.00
-// - >=0.80: 1 pieno
+// Nuova calibrazione didattica:
+// - r >= 0.92 -> 1
+// - 0.80–0.92 -> 0.85–1
+// - 0.60–0.80 -> 0.35–0.85
+// - 0.40–0.60 -> 0.20–0.35
+// - <0.40      -> molto basso
 function calibrateVisual(r){
   if (r <= 0) return 0;
 
-  if (r >= 0.80) return 1;
+  // Perfetto / quasi perfetto
+  if (r >= 0.92) return 1;
 
-  if (r >= 0.50){
-    const t = (r - 0.50) / 0.30;
-    return 0.80 + t * 0.20;
+  // Molto simile ma non perfetto
+  if (r >= 0.80){
+    // 0.80 -> 0.85 ; 0.92 -> 1
+    const t = (r - 0.80) / (0.92 - 0.80);
+    return 0.85 + t * 0.15;
   }
 
-  if (r >= 0.30){
-    const t = (r - 0.30) / 0.20;
-    return 0.40 + t * 0.40;
+  // Struttura riconoscibile ma con errori / incompleta
+  if (r >= 0.60){
+    // 0.60 -> 0.35 ; 0.80 -> 0.85
+    const t = (r - 0.60) / 0.20;
+    return 0.35 + t * 0.50;
   }
 
-  return r;
+  // Abbastanza diversa
+  if (r >= 0.40){
+    // 0.40 -> 0.20 ; 0.60 -> 0.35
+    const t = (r - 0.40) / 0.20;
+    return 0.20 + t * 0.15;
+  }
+
+  // Molto diversa
+  return r * 0.5;
 }
 
 async function scoreStrokesOverlap(studentPNG, teacherPngUrl){
