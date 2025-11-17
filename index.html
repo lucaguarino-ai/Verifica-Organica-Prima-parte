@@ -1833,8 +1833,16 @@ function scoreQ1(atoms, adj, numsArr){
 
   // punteggio base (solo struttura)
   let baseRaw = constraintScore(ok, tot);   // 0..1
-  // calibrazione dolce: tira un po' su i punteggi medi (0.2–0.7)
-  let base = Math.pow(baseRaw, 0.6);
+  let base;
+
+  // Se la struttura soddisfa la gran parte dei vincoli (≥ 0.8) → la consideriamo "corretta"
+  // e saturiamo il punteggio strutturale a 1.
+  if (baseRaw >= 0.8){
+    base = 1;
+  } else {
+    // per strutture parziali usiamo ancora la calibrazione dolce che tira un po' su i medi
+    base = Math.pow(baseRaw, 0.6);
+  }
 
   // bonus/penalità numerazione
   const numBonus = scoreNumerazioneSoft(chain, atoms, numsArr || []);
