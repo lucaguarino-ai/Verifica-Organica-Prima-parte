@@ -1350,31 +1350,31 @@ function mapDice(raw){
   return raw;
 }
 
-// Nuova calibrazione didattica (più generosa in alto):
-// - r ≥ 0.60  → 1 pieno
-// - 0.45–0.60 → 0.70–1.00
-// - 0.30–0.45 → 0.30–0.70
-// - < 0.30    → resta basso
+// Calibrazione overlay (più severa nella fascia media):
+// - r ≥ 0.85  → 1.00
+// - 0.70–0.85 → 0.70–1.00 (cresce ma senza "regalare" 1)
+// - 0.50–0.70 → 0.30–0.70 (medi/medi-bassi)
+// - < 0.50    → rimane basso
 function calibrateVisual(r){
   if (r <= 0) return 0;
 
-  // Fascia alta: overlay già ben sovrapposti → 1 pieno
-  if (r >= 0.60) return 1;
+  // Overlay davvero molto simile → voto pieno
+  if (r >= 0.85) return 1;
 
-  // Fascia medio-alta: 0.45–0.60 → 0.70–1.00
-  if (r >= 0.45){
-    const t = (r - 0.45) / (0.60 - 0.45);   // t ∈ [0,1]
-    return 0.70 + t * 0.30;                // 0.45 → 0.70 ; 0.60 → 1.00
+  // 0.70–0.85 → da 0.70 a 1.00
+  if (r >= 0.70){
+    const t = (r - 0.70) / (0.85 - 0.70); // t ∈ [0,1]
+    return 0.70 + t * 0.30;              // 0.70 → 0.70 ; 0.85 → 1.00
   }
 
-  // Fascia media: 0.30–0.45 → 0.30–0.70
-  if (r >= 0.30){
-    const t = (r - 0.30) / (0.45 - 0.30);   // t ∈ [0,1]
-    return 0.30 + t * 0.40;                // 0.30 → 0.30 ; 0.45 → 0.70
+  // 0.50–0.70 → da 0.30 a 0.70
+  if (r >= 0.50){
+    const t = (r - 0.50) / (0.70 - 0.50); // t ∈ [0,1]
+    return 0.30 + t * 0.40;              // 0.50 → 0.30 ; 0.70 → 0.70
   }
 
-  // Fascia bassa: < 0.30 → non la “spariamo” su
-  return r; // o, se vuoi essere ancora più severo: return r * 0.8;
+  // < 0.50 → non gonfiamo
+  return r * 0.4; // 0.25 → 0.10, ecc.
 }
 
 async function scoreStrokesOverlap(studentPNG, teacherPngUrl){
@@ -1719,9 +1719,18 @@ function scoreQ1(atoms, adj){
   const sBackward = subScoreForOrientation([...chain].reverse());
   const subsScore = Math.max(sForward, sBackward); // max 1
 
-  // pesi: catena 0.40, legami 0.30, sostituenti 0.30
-  // (così, se catena e saturazione sono corrette, sei già molto in alto)
-  const total = 0.40*chainLenScore + 0.30*multScore + 0.30*subsScore;
+  // pesi base: catena 0.40, legami 0.30, sostituenti 0.30
+  let total = 0.40*chainLenScore + 0.30*multScore + 0.30*subsScore;
+
+  // Se tutti i vincoli principali sono soddisfatti in modo pieno → diamo 1
+  const allKeyOk = (chainLenScore === 1 && multScore === 1 && subsScore >= 0.9);
+  if (allKeyOk) {
+    total = 1;
+  } else {
+    // altrimenti schiacciamo i punteggi medi (0.3–0.8) verso il basso
+    total = Math.pow(total, 1.2);
+  }
+
   return Math.max(0, Math.min(1, total));
 }
 
@@ -1770,7 +1779,23 @@ function scoreQ2(atoms, adj){
 
   // pesi globali (più severi sui dettagli):
   // catena 0.15, presenza triplo 0.15, posizione 0.30, sostituenti 0.40
-  const total = 0.15*chainLenScore + 0.15*hasTripleScore + 0.30*posScore + 0.40*subsScore;
+  let total = 0.15*chainLenScore + 0.15*hasTripleScore + 0.30*posScore + 0.40*subsScore;
+
+  // vincoli "da 10 e lode": catena giusta, triplo presente, posizione corretta (2), sostituenti quasi perfetti
+  const allKeyOk = (
+    chainLenScore === 1 &&
+    hasTripleScore === 1 &&
+    posScore >= 0.99 &&
+    subsScore >= 0.9
+  );
+
+  if (allKeyOk) {
+    total = 1;
+  } else {
+    // schiaccia i punteggi medi
+    total = Math.pow(total, 1.25);
+  }
+
   return Math.max(0, Math.min(1, total));
 }
 
@@ -1822,7 +1847,21 @@ function scoreQ3(atoms, adj){
   const subsScore = Math.max(sForward, sBackward);
 
   // pesi globali: catena 0.15, doppio 0.15, posizione 0.30, sostituenti 0.40
-  const total = 0.15*chainLenScore + 0.15*hasDoubleScore + 0.30*posScore + 0.40*subsScore;
+  let total = 0.15*chainLenScore + 0.15*hasDoubleScore + 0.20*posScore + 0.30*subsScore;
+
+  const allKeyOk = (
+    chainLenScore === 1 &&
+    hasDoubleScore === 1 &&
+    posScore >= 0.99 &&
+    subsScore >= 0.9
+  );
+
+  if (allKeyOk) {
+    total = 1;
+  } else {
+    total = Math.pow(total, 1.25);
+  }
+
   return Math.max(0, Math.min(1, total));
 }
 
