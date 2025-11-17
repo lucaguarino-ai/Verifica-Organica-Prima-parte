@@ -1680,187 +1680,192 @@ function computeIupacPosition(chainLength, edgeIndex){
   return Math.min(locFromLeft, locFromRight);
 }
 
+// Funzione di supporto per trasformare un set di vincoli in punteggio 0–1
+function constraintScore(okCount, totalCount){
+  if (!totalCount) return 0;
+  return okCount / totalCount;
+}
+
 // ===== valutazione domanda 1 =====
+// 3,3-dibromo-1,1,5,5-tetracloropentano
 function scoreQ1(atoms, adj){
   const chain = findMainChain(atoms, adj);
-  if (!chain.length) return 0;
+  let ok = 0, tot = 0;
+
+  // VINCOLO 1: catena principale a 5 carboni
+  tot++;
+  if (chain.length === 5) ok++;
 
   const bonds = getChainBonds(chain, adj);
+
+  // VINCOLO 2: solo legami semplici nella catena principale
+  tot++;
   const anyMultiple = bonds.some(b => b.order > 1);
+  if (!anyMultiple) ok++;
 
-  // catena principale: pentano
-  const chainLenScore = (chain.length === 5) ? 1 : 0;
+  // VINCOLI SOSTITUENTI:
+  //  - C1: 2 Cl
+  //  - C3: 2 Br
+  //  - C5: 2 Cl
+  // Controlliamo considerando anche alberi piccoli collegati.
 
-  // niente doppi/tripli
-  const multScore = anyMultiple ? 0 : 1;
-
-  // valutazione sostituenti: 3,3-dibromo-1,1,5,5-tetracloropentano
-  function subScoreForOrientation(orientedChain){
-    if (orientedChain.length < 5) return 0;
+  function checkOrientation(orientedChain){
+    let okLocal = 0, totLocal = 0;
+    if (orientedChain.length < 5) return {ok:0, tot:0};
 
     const h1 = countHalogensAtPos(atoms, adj, orientedChain, 0); // C1
     const h3 = countHalogensAtPos(atoms, adj, orientedChain, 2); // C3
     const h5 = countHalogensAtPos(atoms, adj, orientedChain, 4); // C5
 
-    // Cl su C1 e C5 (ci aspettiamo 2 + 2)
-    const cl1 = h1.Cl || 0;
-    const cl5 = h5.Cl || 0;
-    const clEndScore = 0.5 * Math.min(cl1/2, 1) + 0.5 * Math.min(cl5/2, 1); // max 1
+    // Cl a C1 (almeno 2)
+    totLocal++;
+    if ((h1.Cl || 0) >= 2) okLocal++;
 
-    // Br su C3 (ci aspettiamo 2)
-    const br3 = h3.Br || 0;
-    const brScore = Math.min(br3/2, 1); // max 1
+    // Cl a C5 (almeno 2)
+    totLocal++;
+    if ((h5.Cl || 0) >= 2) okLocal++;
 
-    // pesi: Cl 0.5, Br 0.5
-    return 0.5 * clEndScore + 0.5 * brScore;
+    // Br a C3 (almeno 2)
+    totLocal++;
+    if ((h3.Br || 0) >= 2) okLocal++;
+
+    return {ok:okLocal, tot:totLocal};
   }
 
-  const sForward  = subScoreForOrientation(chain);
-  const sBackward = subScoreForOrientation([...chain].reverse());
-  const subsScore = Math.max(sForward, sBackward); // max 1
+  const forward  = checkOrientation(chain);
+  const backward = checkOrientation([...chain].reverse());
 
-  // pesi base: catena 0.40, legami 0.30, sostituenti 0.30
-  let total = 0.40*chainLenScore + 0.30*multScore + 0.30*subsScore;
+  // prendiamo l'orientamento che rispetta più vincoli di sostituenti
+  const bestSubsOk  = Math.max(forward.ok, backward.ok);
+  const bestSubsTot = Math.max(forward.tot, backward.tot);
 
-  // Se la catena è giusta, niente doppi/tripli e i sostituenti sono quasi tutti al posto giusto → 1 pieno
-  const allKeyOk = (
-    chainLenScore === 1 &&
-    multScore === 1 &&
-    subsScore >= 0.8      // soglia un po' più morbida di 0.9
-  );
+  ok  += bestSubsOk;
+  tot += bestSubsTot;
 
-  if (allKeyOk) {
-    total = 1;
-  }
-
-  // NIENTE Math.pow qui, lasciamo il totale lineare
-  return Math.max(0, Math.min(1, total));
+  return constraintScore(ok, tot);
 }
 
 // ===== valutazione domanda 2 =====
 // 1-cloro-4,4-dimetil-2-esino
 function scoreQ2(atoms, adj){
   const chain = findMainChain(atoms, adj);
-  if (!chain.length) return 0;
+  let ok = 0, tot = 0;
+
+  // VINCOLO 1: catena principale a 6 carboni
+  tot++;
+  if (chain.length === 6) ok++;
 
   const bonds = getChainBonds(chain, adj);
   const tripleEdges = bonds.filter(b => b.order === 3);
 
-  const chainLenScore = (chain.length === 6) ? 1 : 0;
-  const hasTripleScore = tripleEdges.length ? 1 : 0;
+  // VINCOLO 2: esiste almeno un triplo legame
+  tot++;
+  if (tripleEdges.length > 0) ok++;
 
-  let posScore = 0;
-  if (tripleEdges.length){
-    tripleEdges.forEach(e=>{
-      const pos = computeIupacPosition(chain.length, e.index);
-      if (pos === 2) posScore = 1; // solo posizione 2 dà credito
-    });
-  }
+  // VINCOLO 3: il triplo è in posizione 2 (IUPAC)
+  // se ce ne sono più di uno, ci accontentiamo che uno sia al 2
+  tot++;
+  let pos2Ok = false;
+  tripleEdges.forEach(e=>{
+    const pos = computeIupacPosition(chain.length, e.index);
+    if (pos === 2) pos2Ok = true;
+  });
+  if (pos2Ok) ok++;
 
-  function subsScoreForOrientation(orientedChain){
-    if (orientedChain.length < 4) return 0;
+  // VINCOLI SOSTITUENTI:
+  // - 1-cloro: Cl sul C1
+  // - 4,4-dimetil: due metili sul C4
+
+  function checkOrientation(orientedChain){
+    let okLocal = 0, totLocal = 0;
+    if (orientedChain.length < 4) return {ok:0, tot:0};
 
     // Cl su C1
     const h1 = countHalogensAtPos(atoms, adj, orientedChain, 0);
-    const cl1 = h1.Cl || 0;
-    const clScore = Math.min(cl1/1, 1); // ci basta 1 Cl
+    totLocal++;
+    if ((h1.Cl || 0) >= 1) okLocal++;
 
-    // 4,4-dimetil: due metili su C4 (indice 3)
+    // 4,4-dimetil (due metili su C4) -> indice 3
     const alk4 = countAlkylAtPos(atoms, adj, orientedChain, 3);
-    const methyl4 = alk4.methyl || 0;
-    const metilScore = Math.min(methyl4/2, 1); // due metili → punteggio pieno
+    totLocal++;
+    if ((alk4.methyl || 0) >= 2) okLocal++;
 
-    // pesi interni: metà Cl, metà metili
-    const base = 0.5*clScore + 0.5*metilScore;
-    // resa più severa sui parziali
-    return Math.pow(base, 1.3);
+    return {ok:okLocal, tot:totLocal};
   }
 
-  const sForward  = subsScoreForOrientation(chain);
-  const sBackward = subsScoreForOrientation([...chain].reverse());
-  const subsScore = Math.max(sForward, sBackward);
+  const forward  = checkOrientation(chain);
+  const backward = checkOrientation([...chain].reverse());
+  const bestSubsOk  = Math.max(forward.ok, backward.ok);
+  const bestSubsTot = Math.max(forward.tot, backward.tot);
 
-  // pesi globali (più severi sui dettagli):
-  // catena 0.15, presenza triplo 0.15, posizione 0.30, sostituenti 0.40
-  let total = 0.15*chainLenScore + 0.15*hasTripleScore + 0.30*posScore + 0.40*subsScore;
+  ok  += bestSubsOk;
+  tot += bestSubsTot;
 
-  const allKeyOk = (
-    chainLenScore === 1 &&
-    hasTripleScore === 1 &&
-    posScore === 1 &&    // triplo proprio nel punto giusto
-    subsScore >= 0.8     // sostituenti quasi tutti giusti
-  );
-
-  if (allKeyOk) {
-    total = 1;
-  }
-
-  // niente Math.pow: i parziali restano coerenti col peso dei vincoli
-  return Math.max(0, Math.min(1, total));
+  return constraintScore(ok, tot);
 }
 
 // ===== valutazione domanda 3 =====
 // 1-bromo-3-etil-4-metil-3-esene
 function scoreQ3(atoms, adj){
   const chain = findMainChain(atoms, adj);
-  if (!chain.length) return 0;
+  let ok = 0, tot = 0;
+
+  // VINCOLO 1: catena principale a 6 carboni
+  tot++;
+  if (chain.length === 6) ok++;
 
   const bonds = getChainBonds(chain, adj);
   const doubleEdges = bonds.filter(b => b.order === 2);
 
-  const chainLenScore = (chain.length === 6) ? 1 : 0;
-  const hasDoubleScore = doubleEdges.length ? 1 : 0;
+  // VINCOLO 2: almeno un doppio legame
+  tot++;
+  if (doubleEdges.length > 0) ok++;
 
-  let posScore = 0;
-  if (doubleEdges.length){
-    doubleEdges.forEach(e=>{
-      const pos = computeIupacPosition(chain.length, e.index);
-      if (pos === 3) posScore = 1; // solo posizione 3
-    });
-  }
+  // VINCOLO 3: doppio in posizione 3 (IUPAC)
+  tot++;
+  let pos3Ok = false;
+  doubleEdges.forEach(e=>{
+    const pos = computeIupacPosition(chain.length, e.index);
+    if (pos === 3) pos3Ok = true;
+  });
+  if (pos3Ok) ok++;
 
-  function subsScoreForOrientation(orientedChain){
-    if (orientedChain.length < 4) return 0;
+  // VINCOLI SOSTITUENTI:
+  // - 1-bromo
+  // - 3-etil
+  // - 4-metil
+
+  function checkOrientation(orientedChain){
+    let okLocal = 0, totLocal = 0;
+    if (orientedChain.length < 4) return {ok:0, tot:0};
 
     // 1-bromo
     const h1 = countHalogensAtPos(atoms, adj, orientedChain, 0);
-    const br1 = h1.Br || 0;
-    const brScore = Math.min(br1/1, 1);
+    totLocal++;
+    if ((h1.Br || 0) >= 1) okLocal++;
 
     // 3-etil (indice 2)
     const alk3 = countAlkylAtPos(atoms, adj, orientedChain, 2);
-    const eth3 = alk3.ethyl || 0;
-    const etilScore = Math.min(eth3/1, 1);
+    totLocal++;
+    if ((alk3.ethyl || 0) >= 1) okLocal++;
 
     // 4-metil (indice 3)
     const alk4 = countAlkylAtPos(atoms, adj, orientedChain, 3);
-    const met4 = alk4.methyl || 0;
-    const metilScore = Math.min(met4/1, 1);
+    totLocal++;
+    if ((alk4.methyl || 0) >= 1) okLocal++;
 
-    // pesi interni: Br 0.3, etil 0.35, metil 0.35
-    const base = 0.3*brScore + 0.35*etilScore + 0.35*metilScore;
-    return Math.pow(base, 1.3); // parziali più “puniti”
+    return {ok:okLocal, tot:totLocal};
   }
 
-  const sForward  = subsScoreForOrientation(chain);
-  const sBackward = subsScoreForOrientation([...chain].reverse());
-  const subsScore = Math.max(sForward, sBackward);
+  const forward  = checkOrientation(chain);
+  const backward = checkOrientation([...chain].reverse());
+  const bestSubsOk  = Math.max(forward.ok, backward.ok);
+  const bestSubsTot = Math.max(forward.tot, backward.tot);
 
-  // pesi globali: catena 0.15, doppio 0.15, posizione 0.30, sostituenti 0.40
-  let total = 0.15*chainLenScore + 0.15*hasDoubleScore + 0.20*posScore + 0.30*subsScore;
+  ok  += bestSubsOk;
+  tot += bestSubsTot;
 
-  const allKeyOk = (
-    chainLenScore === 1 &&
-    hasDoubleScore === 1 &&
-    posScore === 1 &&
-    subsScore >= 0.8
-  );
-
-  if (allKeyOk) {
-    total = 1;
-  }
-
-  return Math.max(0, Math.min(1, total));
+  return constraintScore(ok, tot);
 }
 
 document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
