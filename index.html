@@ -1825,6 +1825,9 @@ function scoreQ1(atoms, adj, numsArr){
   if (final < 0) final = 0;
   if (final > 1) final = 1;
 
+  // Se la costruzione è già molto buona (>= 0.8), la consideriamo piena
+  final = (final >= 0.8) ? 1 : final;
+
   return final;
 }
 
