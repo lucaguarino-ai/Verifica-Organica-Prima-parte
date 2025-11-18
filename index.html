@@ -1364,6 +1364,7 @@ function calibrateVisual(r, kind){
 
   const name = (kind || "").toLowerCase();
   const isRing = name.includes("benzene") || name.includes("ciclo");
+  const isAlcano = name.includes("alcano");
 
   // ========================
   // CASO A: strutture cicliche
@@ -1380,8 +1381,22 @@ function calibrateVisual(r, kind){
     return 0.20;
   }
 
+     // ===== CASO B: ALCANO (più severo) =====
+     if (isAlcano){
+         const T_PERFETTO_ALCANO       = 0.65; // richiede similarità più alta per avere 1
+         const T_QUASI_PERFETTO_ALCANO = 0.55;
+         const T_ACCETTABILE_ALCANO    = 0.45;
+         const T_MINIMO_ALCANO         = 0.35;
+
+         if (r >= T_PERFETTO_ALCANO)       return 1.00;
+         if (r >= T_QUASI_PERFETTO_ALCANO) return 0.85;
+         if (r >= T_ACCETTABILE_ALCANO)    return 0.50;
+         if (r >= T_MINIMO_ALCANO)         return 0.30;
+         return 0.15;
+     }
+
   // ========================
-  // CASO B: strutture lineari
+  // CASO C: strutture lineari
   // ========================
 
   // Soglie pensate per i valori REALI che hai visto:
@@ -1540,8 +1555,84 @@ function renderBuildSnapshot(payload, width=800, height=500){
 
 <script>
 /* ===== Riepilogo + PIN + bottoni Home ===== */
+
+// normalizza una stringa di nomenclatura:
+// - toglie spazi doppi
+// - uniforma spazi intorno a "-" e ","
+// - ignora maiuscole/minuscole per il confronto di base
+function normalizeNomenBase(s){
+  s = (s || '').trim();
+  if (!s) return '';
+  // unifica spazi multipli
+  s = s.replace(/\s+/g, ' ');
+  // spazi attorno a "-" e ","
+  s = s.replace(/\s*-\s*/g, '-');
+  s = s.replace(/\s*,\s*/g, ',');
+  // per il confronto di base non distinguiamo metil/Metil ecc.
+  s = s.toLowerCase();
+  return s;
+}
+
 function editDistance(a,b){const dp=Array.from({length:b.length+1},(_,j)=>j);for(let i=1;i<=a.length;i++){let prev=i-1;dp[0]=i;for(let j=1;j<=b.length;j++){const tmp=dp[j];const cost=a[i-1]===b[j-1]?0:1;dp[j]=Math.min(dp[j]+1,dp[j-1]+1,prev+cost);prev=tmp;}}return dp[b.length];}
-function simFine(a,b){a=(a||'').toLowerCase().trim();b=(b||'').toLowerCase().trim();const L=Math.max(a.length,b.length);if(L===0)return 1;const ed=editDistance(a,b);const s=(L-ed)/L;if(s>=0.90)return 1.0;if(s>=0.75)return 0.75;if(s>=0.50)return 0.50;if(s>=0.25)return 0.25;return 0.0;}
+function simFine(a,b){
+  const na = normalizeNomenBase(a);
+  const nb = normalizeNomenBase(b);
+
+  if (!na && !nb) return 1;
+  if (na === nb) return 1;  // identico (spazi e maiuscole ignorate) → perfetto
+
+  const L = Math.max(na.length, nb.length);
+  if (L === 0) return 1;
+
+  const ed = editDistance(na, nb);
+  const s  = (L - ed) / L;  // 0..1
+
+  // NON diamo più 1 se c'è anche solo una differenza (etil vs metil, numeri, ecc.)
+  if (s >= 0.92) return 0.9;   // quasi identico
+  if (s >= 0.85) return 0.75;
+  if (s >= 0.70) return 0.5;
+  if (s >= 0.50) return 0.25;
+  return 0.0;
+}
+
+// Similarità "a parole" (token) sulla nomenclatura
+function nlpSimilarity(a,b){
+  const na = normalizeNomenBase(a);
+  const nb = normalizeNomenBase(b);
+
+  if (!na && !nb) return 1;
+
+  const A = new Set(na.split(/[^\wàèéìòóùç-]+/).filter(Boolean));
+  const B = new Set(nb.split(/[^\wàèéìòóùç-]+/).filter(Boolean));
+
+  if (A.size === 0 || B.size === 0) return 0;
+
+  let inter = 0;
+  A.forEach(t => { if (B.has(t)) inter++; });
+
+  const j = inter / Math.max(A.size, B.size); // 0..1
+
+  if (j >= 0.90) return 0.9;
+  if (j >= 0.75) return 0.75;
+  if (j >= 0.60) return 0.5;
+  if (j >= 0.40) return 0.25;
+  return 0.0;
+}
+
+// Penalità leggera se gli elementi chimici sono minuscoli (br, cl, f, i)
+function elementCasePenalty(userTxt){
+  const s = userTxt || '';
+  let penalty = 0;
+
+  // cerchiamo "br", "cl", "f", "i" come simboli isolati
+  if (/(^|[^A-Za-z])br([^A-Za-z]|$)/.test(s)) penalty += 0.1;
+  if (/(^|[^A-Za-z])cl([^A-Za-z]|$)/.test(s)) penalty += 0.1;
+  if (/(^|[^A-Za-z])f([^A-Za-z]|$)/.test(s))  penalty += 0.1;
+  if (/(^|[^A-Za-z])i([^A-Za-z]|$)/.test(s))  penalty += 0.1;
+
+  if (penalty > 0.2) penalty = 0.2; // massimo -0.2
+  return penalty;
+}
 
 const pinOverlay = document.getElementById('pinOverlay');
 const pinInput = document.getElementById('pinInput');
@@ -2035,7 +2126,11 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
         const corr = ({"alcano.jpg":"3,5dietil-3,5dimetilottano","alchene.jpg":"5etil-3metil-4ottene","alchino.jpg":"4Br-6Cl-4etil-2eptino","diene.jpg":"trans 3Cl-4etil-3eptene","benzene.jpg":"4Br-2Cl-1etilcicloesano"})[file] || '';
         const sED  = simFine(userTxt, corr);
         const sNLP = nlpSimilarity(userTxt, corr);
-        const sText = Math.max(sED, sNLP);
+        let sText  = Math.max(sED, sNLP);
+
+                   // penalità leggera per simboli di elementi (Br, Cl, F, I) scritti in minuscolo
+        const pen = elementCasePenalty(userTxt);
+        sText = Math.max(0, sText - pen);
 
         const key = (window.answerKeys||{})[file];
         const studOverlay = await studentOverlayOnlyPNG(file).catch(()=> '');
