@@ -1381,19 +1381,19 @@ function calibrateVisual(r, kind){
     return 0.20;
   }
 
-     // ===== CASO B: ALCANO (più severo) =====
-     if (isAlcano){
-         const T_PERFETTO_ALCANO       = 0.65; // richiede similarità più alta per avere 1
-         const T_QUASI_PERFETTO_ALCANO = 0.55;
-         const T_ACCETTABILE_ALCANO    = 0.45;
-         const T_MINIMO_ALCANO         = 0.35;
+  // ===== CASO B: ALCANO (più severo) =====
+  if (isAlcano){
+    const T_PERFETTO_ALCANO       = 0.65; // richiede similarità più alta per avere 1
+    const T_QUASI_PERFETTO_ALCANO = 0.55;
+    const T_ACCETTABILE_ALCANO    = 0.45;
+    const T_MINIMO_ALCANO         = 0.35;
 
-         if (r >= T_PERFETTO_ALCANO)       return 1.00;
-         if (r >= T_QUASI_PERFETTO_ALCANO) return 0.85;
-         if (r >= T_ACCETTABILE_ALCANO)    return 0.50;
-         if (r >= T_MINIMO_ALCANO)         return 0.30;
-         return 0.15;
-     }
+    if (r >= T_PERFETTO_ALCANO)       return 1.00;
+    if (r >= T_QUASI_PERFETTO_ALCANO) return 0.85;
+    if (r >= T_ACCETTABILE_ALCANO)    return 0.50;
+    if (r >= T_MINIMO_ALCANO)         return 0.30;
+    return 0.15;
+  }
 
   // ========================
   // CASO C: strutture lineari
