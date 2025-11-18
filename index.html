@@ -1350,35 +1350,48 @@ function mapDice(raw){
   return raw;
 }
 
-// Calibrazione overlay per Sez.1
-// r = Dice grezzo (0..1) dopo dilatazione
-// Scopo: immagini molto vicine alla soluzione → 1
+// r = Dice grezzo (0..1)
+// Calibrazione basata sui valori REALI osservati:
+// - perfetto: r ≥ 0.88 → 1.00
+// - quasi perfetto: r 0.78–0.88 → 0.80–1.00
+// - medio: r 0.55–0.78 → 0.45–0.80
+// - basso: r 0.35–0.55 → 0.20–0.45
+// - molto basso: r < 0.35 → r*0.4
 function calibrateVisual(r){
   if (!isFinite(r) || r <= 0) return 0;
 
-  // Fascia alta: overlay davvero buono
-  // Tutto ciò che è almeno 0.70 lo consideriamo "didatticamente perfetto"
-  if (r >= 0.70){
-    return 1;
+  // ⭐ Correzione strutture cicliche (cicloalcani) ⭐
+  // Molte forme chiuse vengono lette come r ~0.65–0.70 anche se perfette.
+  // Le consideriamo perfette.
+  if (r >= 0.65 && r <= 0.75){
+    return 1.00;
   }
 
-  // Fascia medio-alta: 0.50–0.70 → 0.70–1.00
-  // 0.50 → 0.70 ; 0.70 → 1.00
-  if (r >= 0.50){
-    const t = (r - 0.50) / (0.70 - 0.50);   // t ∈ [0,1]
-    return 0.70 + t * 0.30;
+  // Perfetto (generale: overlay "quasi identico")
+  if (r >= 0.88){
+    return 1.00;
   }
 
-  // Fascia media: 0.30–0.50 → 0.40–0.70
-  // 0.30 → 0.40 ; 0.50 → 0.70
-  if (r >= 0.30){
-    const t = (r - 0.30) / (0.50 - 0.30);   // t ∈ [0,1]
-    return 0.40 + t * 0.30;
+  // Quasi perfetto → curva verso 1.0
+  if (r >= 0.78){
+    const t = (r - 0.78) / (0.88 - 0.78); // t in [0,1]
+    return 0.80 + t * 0.20;              // 0.80 → 1.00
   }
 
-  // Fascia bassa: < 0.30 → molto bassa (compressa)
-  // es. 0.20 → 0.10 ; 0.10 → 0.05
-  return r * 0.5;
+  // Medio → zona 0.45–0.80
+  if (r >= 0.55){
+    const t = (r - 0.55) / (0.78 - 0.55);
+    return 0.45 + t * 0.35;              // 0.45 → 0.80
+  }
+
+  // Basso → 0.20–0.45
+  if (r >= 0.35){
+    const t = (r - 0.35) / (0.55 - 0.35);
+    return 0.20 + t * 0.25;              // 0.20 → 0.45
+  }
+
+  // Molto basso → schiacciato ulteriormente
+  return r * 0.40;
 }
 
 async function scoreStrokesOverlap(studentPNG, teacherPngUrl){
