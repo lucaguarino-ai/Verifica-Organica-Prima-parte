@@ -2027,7 +2027,7 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
         const sVisAdj = calibrateVisual(sVisRaw);
         const visScore = sVisAdj;
 
-        const pts = +((sText*(window.W_TEXT||1) + sVisAdj*(window.W_VIS||1))).toFixed(2);
+        const pts = +((sText*(window.W_TEXT||1) + visScore*(window.W_VIS||1))).toFixed(2);
         puntiSec1 += pts;
 
         const studImg = await compositeStudentImage(file).catch(()=> '');
