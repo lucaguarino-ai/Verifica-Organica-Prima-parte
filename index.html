@@ -1360,29 +1360,45 @@ function mapDice(raw){
 function calibrateVisual(r){
   if (!isFinite(r) || r <= 0) return 0;
 
-  // === Soglie DIDATTICHE, non matematiche ===
-  // Puoi ritoccare questi 3 valori in futuro:
-  const T_PERFETTO = 0.55; // sopra questo lo consideriamo "molto vicino"
-  const T_BUONO    = 0.48; // sopra questo è "abbastanza vicino"
-  const T_MINIMO   = 0.40; // sopra questo è "imperfetto ma c'è qualcosa"
+// ⭐ Riconoscimento forme cicliche (cicloalcani)
+// Se r è tra 0.34 e 0.41 → è tipicamente un ciclo corretto
+if (r >= 0.34 && r <= 0.41){
+  return 1.00;
+}
 
-  // 1) Molto vicino alla soluzione → 1 pieno
+  // === Soglie basate sui valori REALI osservati ===
+  // Perfetta → r ≈ 0.58–0.60
+  // Quasi perfetta → r ≈ 0.55–0.59 
+  // Imperfetta → r ≈ 0.39–0.48
+  // Cicloalcano perfetto → r ≈ 0.36–0.40
+
+  const T_PERFETTO       = 0.57; // sopra questo → 1.00 (perfetto)
+  const T_QUASI_PERFETTO = 0.52; // sopra questo → ~0.85
+  const T_ACCETTABILE    = 0.42; // sopra questo → ~0.50
+  const T_MINIMO         = 0.35; // sopra questo → ~0.30
+
+  // 1) Perfetto
   if (r >= T_PERFETTO){
     return 1.00;
   }
 
-  // 2) Abbastanza vicino → voto alto ma non pieno
-  if (r >= T_BUONO){
-    return 0.85;
+  // 2) Quasi perfetto
+  if (r >= T_QUASI_PERFETTO){
+    return 0.85; 
   }
 
-  // 3) Imperfetto ma riconoscibile → fascia sufficiente
-  if (r >= T_MINIMO){
+  // 3) Accettabile / imperfetto
+  if (r >= T_ACCETTABILE){
     return 0.50;
   }
 
-  // 4) Molto diverso → basso
-  return 0.20;
+  // 4) Minimo (inclusi i cicloalcani corretti)
+  if (r >= T_MINIMO){
+    return 0.30;
+  }
+
+  // 5) Molto diverso
+  return 0.15;
 }
 
 async function scoreStrokesOverlap(studentPNG, teacherPngUrl){
