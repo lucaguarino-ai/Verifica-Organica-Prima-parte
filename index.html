@@ -1382,19 +1382,20 @@ function calibrateVisual(r, kind){
   }
 
      // ========================
-  // CASO B: ALCANO (più severo)
+  // CASO B: ALCANO (molto severo)
   // ========================
      if (isAlcano){
-         const T_PERFETTO_ALCANO       = 0.65; // richiede similarità più alta per avere 1
-         const T_QUASI_PERFETTO_ALCANO = 0.55;
+         const T_PERFETTO_ALCANO       = 0.60; // da tarare in base alla tua costruzione perfetta
          const T_ACCETTABILE_ALCANO    = 0.45;
-         const T_MINIMO_ALCANO         = 0.35;
 
+         // solo se l'overlay è davvero molto vicino diamo 1
          if (r >= T_PERFETTO_ALCANO)       return 1.00;
-         if (r >= T_QUASI_PERFETTO_ALCANO) return 0.85;
+
+         // tutto il resto (anche se abbastanza simile) scende a 0.50
          if (r >= T_ACCETTABILE_ALCANO)    return 0.50;
-         if (r >= T_MINIMO_ALCANO)         return 0.30;
-         return 0.15;
+
+         // molto diverso
+         return 0.20;
      }
 
   // ========================
@@ -1565,13 +1566,18 @@ function renderBuildSnapshot(payload, width=800, height=500){
 function normalizeNomenBase(s){
   s = (s || '').trim();
   if (!s) return '';
-  // unifica spazi multipli
-  s = s.replace(/\s+/g, ' ');
-  // spazi attorno a "-" e ","
-  s = s.replace(/\s*-\s*/g, '-');
-  s = s.replace(/\s*,\s*/g, ',');
-  // per il confronto di base non distinguiamo metil/Metil ecc.
+
+  // tutto in minuscolo per ignorare maiuscole nei gruppi (metil, etil, cis, trans...)
   s = s.toLowerCase();
+
+  // normalizza virgole e trattini
+  s = s.replace(/\s*,\s*/g, ',');  // "3, 5" -> "3,5"
+  s = s.replace(/\s*-\s*/g, '-');  // "3 - metil" -> "3-metil"
+
+  // *** IGNORA COMPLETAMENTE LA SPAZIATURA ***
+  // "3,5 dietil   -   3,5 dimetil ottano" -> "3,5dietil-3,5dimetilottano"
+  s = s.replace(/\s+/g, '');
+
   return s;
 }
 
@@ -1581,7 +1587,7 @@ function simFine(a,b){
   const nb = normalizeNomenBase(b);
 
   if (!na && !nb) return 1;
-  if (na === nb) return 1;  // identico (spazi e maiuscole ignorate) → perfetto
+  if (na === nb) return 1;  // identico dopo normalizzazione → perfetto
 
   const L = Math.max(na.length, nb.length);
   if (L === 0) return 1;
@@ -1589,8 +1595,9 @@ function simFine(a,b){
   const ed = editDistance(na, nb);
   const s  = (L - ed) / L;  // 0..1
 
-  // NON diamo più 1 se c'è anche solo una differenza (etil vs metil, numeri, ecc.)
-  if (s >= 0.92) return 0.9;   // quasi identico
+  // s = similarità "grezza"
+  // qui siamo più severi: se NON è identico, non arrivi mai a 1
+  if (s >= 0.95) return 0.9;   // quasi identico (piccoli errori)
   if (s >= 0.85) return 0.75;
   if (s >= 0.70) return 0.5;
   if (s >= 0.50) return 0.25;
