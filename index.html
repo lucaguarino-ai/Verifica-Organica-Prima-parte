@@ -1385,8 +1385,8 @@ function calibrateVisual(r, kind){
   // CASO B: ALCANO (molto severo)
   // ========================
      if (isAlcano){
-         const T_PERFETTO_ALCANO       = 0.60; // da tarare in base alla tua costruzione perfetta
-         const T_ACCETTABILE_ALCANO    = 0.45;
+         const T_PERFETTO_ALCANO       = 0.61; // da tarare in base alla tua costruzione perfetta
+         const T_ACCETTABILE_ALCANO    = 0.50;
 
          // solo se l'overlay è davvero molto vicino diamo 1
          if (r >= T_PERFETTO_ALCANO)       return 1.00;
