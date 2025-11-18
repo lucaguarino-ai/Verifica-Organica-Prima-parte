@@ -1357,48 +1357,57 @@ function mapDice(raw){
 // - medio: r 0.55–0.78 → 0.45–0.80
 // - basso: r 0.35–0.55 → 0.20–0.45
 // - molto basso: r < 0.35 → r*0.4
-function calibrateVisual(r){
+// r = similarità grezza (0..1)
+// kind = nome file, es. "alcano.jpg", "benzene.jpg", ...
+function calibrateVisual(r, kind){
   if (!isFinite(r) || r <= 0) return 0;
 
-// ⭐ Riconoscimento forme cicliche (cicloalcani)
-// Se r è tra 0.34 e 0.41 → è tipicamente un ciclo corretto
-if (r >= 0.34 && r <= 0.41){
-  return 1.00;
-}
+  const name = (kind || "").toLowerCase();
+  const isRing = name.includes("benzene") || name.includes("ciclo");
 
-  // === Soglie basate sui valori REALI osservati ===
-  // Perfetta → r ≈ 0.58–0.60
-  // Quasi perfetta → r ≈ 0.55–0.59 
-  // Imperfetta → r ≈ 0.39–0.48
-  // Cicloalcano perfetto → r ≈ 0.36–0.40
+  // ========================
+  // CASO A: strutture cicliche
+  // ========================
+  if (isRing){
+    // Per gli anelli accettiamo che la metrica r sia più bassa:
+    // - r ≥ 0.40 → consideriamo l'annotazione perfetta
+    // - 0.32–0.40 → quasi corretta
+    // - 0.25–0.32 → imperfetta ma ok
+    // - <0.25 → bassa
+    if (r >= 0.40) return 1.00;   // ciclo perfetto
+    if (r >= 0.32) return 0.85;   // quasi perfetto
+    if (r >= 0.25) return 0.50;   // imperfetto
+    return 0.20;
+  }
 
-  const T_PERFETTO       = 0.57; // sopra questo → 1.00 (perfetto)
-  const T_QUASI_PERFETTO = 0.52; // sopra questo → ~0.85
-  const T_ACCETTABILE    = 0.42; // sopra questo → ~0.50
-  const T_MINIMO         = 0.35; // sopra questo → ~0.30
+  // ========================
+  // CASO B: strutture lineari
+  // ========================
 
-  // 1) Perfetto
+  // Soglie pensate per i valori REALI che hai visto:
+  // - perfetta → la più alta delle tre (tu ora la vedi come 1)
+  // - quasi perfetta → leggermente sotto
+  // - imperfetta → ancora più bassa
+
+  const T_PERFETTO       = 0.60; // sopra questo → 1.00
+  const T_QUASI_PERFETTO = 0.52; // sopra questo → 0.85
+  const T_ACCETTABILE    = 0.42; // sopra questo → 0.50
+  const T_MINIMO         = 0.35; // sopra questo → 0.30
+
   if (r >= T_PERFETTO){
-    return 1.00;
+    return 1.00;  // perfetta lineare
   }
-
-  // 2) Quasi perfetto
   if (r >= T_QUASI_PERFETTO){
-    return 0.85; 
+    return 0.85;  // quasi perfetta
   }
-
-  // 3) Accettabile / imperfetto
   if (r >= T_ACCETTABILE){
-    return 0.50;
+    return 0.50;  // imperfetta ma riconoscibile
   }
-
-  // 4) Minimo (inclusi i cicloalcani corretti)
   if (r >= T_MINIMO){
-    return 0.30;
+    return 0.30;  // molto imperfetta
   }
 
-  // 5) Molto diverso
-  return 0.15;
+  return 0.15;     // praticamente niente di giusto
 }
 
 async function scoreStrokesOverlap(studentPNG, teacherPngUrl){
@@ -2040,7 +2049,7 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
           sVisRaw = 0;
         }
 
-        const sVisAdj = calibrateVisual(sVisRaw);
+        const sVisAdj = calibrateVisual(sVisRaw, file);
         const visScore = sVisAdj;
 
         const pts = +((sText*(window.W_TEXT||1) + visScore*(window.W_VIS||1))).toFixed(2);
