@@ -1360,37 +1360,34 @@ function mapDice(raw){
 function calibrateVisual(r){
   if (!isFinite(r) || r <= 0) return 0;
 
-  // ⭐ Correzione strutture cicliche (cicloalcani) ⭐
-  // Molte forme chiuse vengono lette come r ~0.65–0.70 anche se perfette.
-  // Le consideriamo perfette.
+  // ⭐ Correzione strutture cicliche (cicloalcani)
+  // Molte forme chiuse vengono lette come r ~0.65–0.70 anche se perfette:
+  // in questi casi le consideriamo perfette.
   if (r >= 0.65 && r <= 0.75){
     return 1.00;
   }
 
-  // Perfetto (generale: overlay "quasi identico")
-  if (r >= 0.88){
+  // QUALSIASI overlay davvero buono: da 0.75 in su lo consideriamo "perfetto" didatticamente
+  if (r >= 0.75){
     return 1.00;
   }
 
-  // Quasi perfetto → curva verso 1.0
-  if (r >= 0.78){
-    const t = (r - 0.78) / (0.88 - 0.78); // t in [0,1]
-    return 0.80 + t * 0.20;              // 0.80 → 1.00
+  // Fascia "abbastanza buona" → 0.60–0.75 mappata in 0.45–0.80
+  // Qui vogliamo che il tuo "imperfetta" (vecchio 0.70) stia circa a 0.5–0.6
+  if (r >= 0.60){
+    // 0.60 → 0.45 ; 0.75 → 0.80
+    const t = (r - 0.60) / (0.75 - 0.60); // t ∈ [0,1]
+    return 0.45 + t * 0.35;
   }
 
-  // Medio → zona 0.45–0.80
-  if (r >= 0.55){
-    const t = (r - 0.55) / (0.78 - 0.55);
-    return 0.45 + t * 0.35;              // 0.45 → 0.80
+  // Fascia media-bassa → 0.40–0.60 mappata in 0.20–0.45
+  if (r >= 0.40){
+    // 0.40 → 0.20 ; 0.60 → 0.45
+    const t = (r - 0.40) / (0.60 - 0.40);
+    return 0.20 + t * 0.25;
   }
 
-  // Basso → 0.20–0.45
-  if (r >= 0.35){
-    const t = (r - 0.35) / (0.55 - 0.35);
-    return 0.20 + t * 0.25;              // 0.20 → 0.45
-  }
-
-  // Molto basso → schiacciato ulteriormente
+  // Sotto 0.40: molto bassa → schiacciamo ancora un po'
   return r * 0.40;
 }
 
