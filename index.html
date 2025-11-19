@@ -1729,7 +1729,7 @@ document.getElementById('printBtn').addEventListener('click', async ()=>{
     const pdfBase64 = await blobToBase64(pdfBlob);
 
     // URL della tua WebApp Apps Script (quella /exec)
-    const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwrmWxu9a-pDGED_EEob0gTC2Y57JMXL7l8-PgHNe5pVke5xJ2s0KqZC5_-EwWbRdG07g/exec';
+    const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyvIQfCy8mevjF__Aw4TDT9PHLSwLfuJdHQoU5ivjjXGu4SZd--Yc5RTQ5OhBoaC4HPDQ/exec';
 
     const resp = await fetch(WEBAPP_URL, {
       method: 'POST',
