@@ -1,9 +1,6 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"
-        integrity="sha512-YcsIPGqYpaJnxh9pPGgEJxL4ohQfqvhA4pO2NO0hN4cBtSGlu1qf9b1YGqWTI74H2Kkhvgc4F6Fv4r3rGrd4w=="
-        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Verifica di chimica organica - Alcani, Alcheni, Alchini</title>
@@ -104,6 +101,9 @@
     }
   }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"
+        integrity="sha512-YcsIPGqYpaJnxh9pPGgEJxL4ohQfqvhA4pO2NO0hN4cBtSGlu1qf9b1YGqWTI74H2Kkhvgc4F6Fv4r3rGrd4w=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 </head>
 <body>
 <h1>Verifica di chimica organica – Alcani, Alcheni, Alchini</h1>
@@ -241,7 +241,7 @@
   <h4>Totale</h4><div id="totali"></div>
   <div class="space-between">
     <button id="homeBtn">🏠 Torna all’inizio (azzera tutto)</button>
-    <button id="printBtn">📤 Invia al docente</button>
+    <button id="printBtn">📄 Esporta PDF</button>
   </div>
 </div>
 
@@ -1557,19 +1557,6 @@ function renderBuildSnapshot(payload, width=800, height=500){
     return c.toDataURL('image/png');
   }catch(_){ return ''; }
 }
-// Converte un Blob (PDF) in stringa base64, per inviarlo alla WebApp
-async function blobToBase64(blob){
-  return new Promise((resolve, reject)=>{
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const dataUrl = reader.result || '';
-      const base64  = String(dataUrl).split(',')[1] || '';
-      resolve(base64);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-}
 </script>
 
 <script>
@@ -1595,6 +1582,20 @@ function normalizeNomenBase(s){
   s = s.replace(/\s+/g, '');
 
   return s;
+}
+
+// Converte un Blob (PDF) in stringa base64 per inviarlo ad Apps Script
+async function blobToBase64(blob){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result || '';
+      const base64  = String(dataUrl).split(',')[1] || '';
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 }
 
 function editDistance(a,b){const dp=Array.from({length:b.length+1},(_,j)=>j);for(let i=1;i<=a.length;i++){let prev=i-1;dp[0]=i;for(let j=1;j<=b.length;j++){const tmp=dp[j];const cost=a[i-1]===b[j-1]?0:1;dp[j]=Math.min(dp[j]+1,dp[j-1]+1,prev+cost);prev=tmp;}}return dp[b.length];}
@@ -1689,16 +1690,24 @@ document.getElementById('printBtn').addEventListener('click', async ()=>{
     return;
   }
 
-  try{
-    const nome    = (document.getElementById('nome').value||'').trim();
-    const cognome = (document.getElementById('cognome').value||'').trim();
-    const dataStr = (document.getElementById('data').value||'').trim().replace(/\//g,'-') || 'data';
+  try {
+    const nome   = (document.getElementById('nome').value   || '').trim();
+    const cogn   = (document.getElementById('cognome').value|| '').trim();
+    const classe = (document.getElementById('classe').value || '').trim();
+    const dataStrRaw = (document.getElementById('data').value || '').trim();
+    const dataStr = dataStrRaw ? dataStrRaw.replace(/\//g,'-') : '';
 
-    const fileName = `Verifica_${cognome || 'Studente'}_${nome || ''}_${dataStr}.pdf`;
+    // Costruiamo un nome file tipo: Verifica_3A_Rossi_Mario_19-11-2025.pdf
+    const safeClasse = classe || 'Classe';
+    const safeCogn   = cogn   || 'Cognome';
+    const safeNome   = nome   || 'Nome';
+    const safeData   = dataStr || 'Data';
 
-    // Sezione da trasformare in PDF (puoi cambiare se vuoi includere altro)
+    const fileName = `Verifica_${safeClasse}_${safeCogn}_${safeNome}_${safeData}.pdf`;
+
     const element = document.getElementById('resultSection');
 
+    // Opzioni base per html2pdf
     const opt = {
       margin:       10,
       filename:     fileName,
@@ -1707,37 +1716,39 @@ document.getElementById('printBtn').addEventListener('click', async ()=>{
       jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
 
-    // 1) genera PDF come Blob
-    const worker  = html2pdf().set(opt).from(element).toPdf();
+    // Genera il PDF come Blob (senza salvarlo sul PC)
+    const worker  = html2pdf().set(opt).from(element);
     const pdfBlob = await worker.outputPdf('blob');
 
-    // 2) converte in base64
+    // Converte il Blob in base64 per l'invio
     const pdfBase64 = await blobToBase64(pdfBlob);
 
-    // 3) invia alla tua WebApp su Apps Script
-    const webAppUrl = https://script.google.com/macros/s/AKfycbwrmWxu9a-pDGED_EEob0gTC2Y57JMXL7l8-PgHNe5pVke5xJ2s0KqZC5_-EwWbRdG07g/exec
+    // URL della tua Web App Apps Script
+    const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwrmWxu9a-pDGED_EEob0gTC2Y57JMXL7l8-PgHNe5pVke5xJ2s0KqZC5_-EwWbRdG07g/exec';
 
-    const res = await fetch(webAppUrl, {
+    const resp = await fetch(WEBAPP_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify({
         fileName: fileName,
         pdfBase64: pdfBase64
       })
     });
 
-    const out = await res.json().catch(()=>({status:'error'}));
+    const data = await resp.json().catch(() => ({ ok:false }));
 
-    if (res.ok && out.status === 'ok'){
-      alert('Verifica inviata al docente (salvata su Drive).');
+    if (resp.ok && data.ok){
+      alert('Verifica inviata e salvata su Google Drive.');
     } else {
-      console.error('Errore lato server:', out);
-      alert('Si è verificato un errore durante l\'invio al docente.');
+      console.error('Errore upload:', data);
+      alert('Si è verificato un problema nel salvataggio su Drive.');
     }
 
-  } catch(err){
-    console.error('Errore generazione/invio PDF', err);
-    alert('Errore nella generazione o nell\'invio del PDF.');
+  } catch (err){
+    console.error('Errore generazione/invio PDF:', err);
+    alert('Si è verificato un errore durante la generazione o l’invio del PDF.');
   }
 });
 document.getElementById('homeBtn').addEventListener('click', ()=>{
