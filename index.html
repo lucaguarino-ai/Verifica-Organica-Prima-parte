@@ -241,7 +241,7 @@
   <h4>Totale</h4><div id="totali"></div>
   <div class="space-between">
     <button id="homeBtn">🏠 Torna all’inizio (azzera tutto)</button>
-    <button id="printBtn">📤 Invia al docente</button>
+    <button id="printBtn">📤 Invia verifica al docente</button>
   </div>
 </div>
 
@@ -1691,15 +1691,15 @@ document.getElementById('printBtn').addEventListener('click', async ()=>{
   }
 
   try {
-    const nome   = (document.getElementById('nome').value   || '').trim();
-    const cogn   = (document.getElementById('cognome').value|| '').trim();
-    const classe = (document.getElementById('classe').value || '').trim();
-    const dataStrRaw = (document.getElementById('data').value || '').trim();
-    const dataStr = dataStrRaw ? dataStrRaw.replace(/\//g,'-') : '';
+    const nome    = (document.getElementById('nome').value    || '').trim();
+    const cognome = (document.getElementById('cognome').value || '').trim();
+    const classe  = (document.getElementById('classe').value  || '').trim();
+    const dataRaw = (document.getElementById('data').value    || '').trim();
+    const dataStr = dataRaw ? dataRaw.replace(/\//g,'-') : '';
 
-    // Costruiamo un nome file tipo: Verifica_3A_Rossi_Mario_19-11-2025.pdf
+    // Nome file: Verifica_3A_Rossi_Mario_19-11-2025.pdf
     const safeClasse = classe || 'Classe';
-    const safeCogn   = cogn   || 'Cognome';
+    const safeCogn   = cognome || 'Cognome';
     const safeNome   = nome   || 'Nome';
     const safeData   = dataStr || 'Data';
 
@@ -1707,7 +1707,6 @@ document.getElementById('printBtn').addEventListener('click', async ()=>{
 
     const element = document.getElementById('resultSection');
 
-    // Opzioni base per html2pdf
     const opt = {
       margin:       10,
       filename:     fileName,
@@ -1716,21 +1715,27 @@ document.getElementById('printBtn').addEventListener('click', async ()=>{
       jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
 
-    // Genera il PDF come Blob (non viene scaricato)
-const worker  = html2pdf().set(opt).from(element).toPdf();
-const pdfBlob = await worker.output('blob');
+    // Genera il PDF come Blob usando la sequenza compatibile con html2pdf 0.10.1
+    const pdfBlob = await new Promise((resolve, reject) => {
+      html2pdf().set(opt).from(element).toPdf().get('pdf').then(pdf => {
+        try {
+          const blob = pdf.output('blob');
+          resolve(blob);
+        } catch (e) {
+          reject(e);
+        }
+      }).catch(reject);
+    });
 
-    // Converte il Blob in base64 per l'invio
+    // Blob → base64
     const pdfBase64 = await blobToBase64(pdfBlob);
 
-    // URL della tua Web App Apps Script
+    // URL della tua WebApp Apps Script (quella /exec)
     const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwrmWxu9a-pDGED_EEob0gTC2Y57JMXL7l8-PgHNe5pVke5xJ2s0KqZC5_-EwWbRdG07g/exec';
 
     const resp = await fetch(WEBAPP_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         fileName: fileName,
         pdfBase64: pdfBase64
