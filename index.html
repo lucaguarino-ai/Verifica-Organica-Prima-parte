@@ -1716,9 +1716,9 @@ document.getElementById('printBtn').addEventListener('click', async ()=>{
       jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
 
-    // Genera il PDF come Blob (senza salvarlo sul PC)
-    const worker  = html2pdf().set(opt).from(element);
-    const pdfBlob = await worker.outputPdf('blob');
+    // Genera il PDF come Blob (non viene scaricato)
+const worker  = html2pdf().set(opt).from(element).toPdf();
+const pdfBlob = await worker.output('blob');
 
     // Converte il Blob in base64 per l'invio
     const pdfBase64 = await blobToBase64(pdfBlob);
