@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"
+        integrity="sha512-YcsIPGqYpaJnxh9pPGgEJxL4ohQfqvhA4pO2NO0hN4cBtSGlu1qf9b1YGqWTI74H2Kkhvgc4F6Fv4r3rGrd4w=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Verifica di chimica organica - Alcani, Alcheni, Alchini</title>
@@ -238,7 +241,7 @@
   <h4>Totale</h4><div id="totali"></div>
   <div class="space-between">
     <button id="homeBtn">🏠 Torna all’inizio (azzera tutto)</button>
-    <button id="printBtn">📄 Esporta PDF</button>
+    <button id="printBtn">📤 Invia al docente</button>
   </div>
 </div>
 
@@ -1554,6 +1557,19 @@ function renderBuildSnapshot(payload, width=800, height=500){
     return c.toDataURL('image/png');
   }catch(_){ return ''; }
 }
+// Converte un Blob (PDF) in stringa base64, per inviarlo alla WebApp
+async function blobToBase64(blob){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const dataUrl = reader.result || '';
+      const base64  = String(dataUrl).split(',')[1] || '';
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
 </script>
 
 <script>
@@ -1663,7 +1679,7 @@ pinInput.addEventListener('keydown', (e)=>{
   if (e.key === 'Enter') document.getElementById('pinOk').click();
 });
 
-document.getElementById('printBtn').addEventListener('click', ()=>{
+document.getElementById('printBtn').addEventListener('click', async ()=>{
   if (!summaryUnlocked){
     alert('Inserisci il PIN per sbloccare il riepilogo.');
     pinOverlay.style.display='flex';
@@ -1672,7 +1688,57 @@ document.getElementById('printBtn').addEventListener('click', ()=>{
     pinInput.focus();
     return;
   }
-  window.print();
+
+  try{
+    const nome    = (document.getElementById('nome').value||'').trim();
+    const cognome = (document.getElementById('cognome').value||'').trim();
+    const dataStr = (document.getElementById('data').value||'').trim().replace(/\//g,'-') || 'data';
+
+    const fileName = `Verifica_${cognome || 'Studente'}_${nome || ''}_${dataStr}.pdf`;
+
+    // Sezione da trasformare in PDF (puoi cambiare se vuoi includere altro)
+    const element = document.getElementById('resultSection');
+
+    const opt = {
+      margin:       10,
+      filename:     fileName,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2 },
+      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+
+    // 1) genera PDF come Blob
+    const worker  = html2pdf().set(opt).from(element).toPdf();
+    const pdfBlob = await worker.outputPdf('blob');
+
+    // 2) converte in base64
+    const pdfBase64 = await blobToBase64(pdfBlob);
+
+    // 3) invia alla tua WebApp su Apps Script
+    const webAppUrl = https://script.google.com/macros/s/AKfycbwrmWxu9a-pDGED_EEob0gTC2Y57JMXL7l8-PgHNe5pVke5xJ2s0KqZC5_-EwWbRdG07g/exec
+
+    const res = await fetch(webAppUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fileName: fileName,
+        pdfBase64: pdfBase64
+      })
+    });
+
+    const out = await res.json().catch(()=>({status:'error'}));
+
+    if (res.ok && out.status === 'ok'){
+      alert('Verifica inviata al docente (salvata su Drive).');
+    } else {
+      console.error('Errore lato server:', out);
+      alert('Si è verificato un errore durante l\'invio al docente.');
+    }
+
+  } catch(err){
+    console.error('Errore generazione/invio PDF', err);
+    alert('Errore nella generazione o nell\'invio del PDF.');
+  }
 });
 document.getElementById('homeBtn').addEventListener('click', ()=>{
   const ok = confirm('Tornare alla schermata iniziale? Tutte le modifiche verranno azzerate.');
