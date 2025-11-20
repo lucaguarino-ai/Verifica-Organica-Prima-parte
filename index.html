@@ -1729,25 +1729,37 @@ document.getElementById('printBtn').addEventListener('click', async ()=>{
     const pdfBase64 = await blobToBase64(pdfBlob);
 
     // URL della tua WebApp Apps Script (quella /exec)
-    const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyvIQfCy8mevjF__Aw4TDT9PHLSwLfuJdHQoU5ivjjXGu4SZd--Yc5RTQ5OhBoaC4HPDQ/exec';
+    const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbycEntB7f6f-oomlmD2kzr9oKTaBfm6o0UA1TBZQByfr27kxhx7eTjvAKiXaSyBgx3irg/exec";
 
-    const resp = await fetch(WEBAPP_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        fileName: fileName,
-        pdfBase64: pdfBase64
-      })
-    });
+    // Invece di fetch → uso un form POST nascosto (niente CORS)
+const form = document.createElement('form');
+form.method = 'POST';
+form.action = WEBAPP_URL;
+// se vuoi che la risposta "File caricato correttamente" si apra in una nuova scheda:
+form.target = '_blank';
 
-    const data = await resp.json().catch(() => ({ ok:false }));
+// aggiungo i campi come input nascosti
+function addField(name, value) {
+  const input = document.createElement('input');
+  input.type  = 'hidden';
+  input.name  = name;
+  input.value = value;
+  form.appendChild(input);
+}
 
-    if (resp.ok && data.ok){
-      alert('Verifica inviata e salvata su Google Drive.');
-    } else {
-      console.error('Errore upload:', data);
-      alert('Si è verificato un problema nel salvataggio su Drive.');
-    }
+// qui passo gli stessi dati che prima mandavamo nel JSON
+addField('pdfBase64', pdfBase64);
+addField('fileName', fileName);
+addField('classe',  safeClasse);
+addField('studente', `${safeNome} ${safeCogn}`);
+
+// aggiungo il form alla pagina, invio, e poi lo rimuovo
+document.body.appendChild(form);
+form.submit();
+document.body.removeChild(form);
+
+// Messaggio all’utente
+alert('Verifica inviata al docente (salvata su Drive).');
 
   } catch (err){
     console.error('Errore generazione/invio PDF:', err);
