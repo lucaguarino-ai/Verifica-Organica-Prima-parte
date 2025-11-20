@@ -1716,27 +1716,30 @@ document.getElementById('printBtn').addEventListener('click', async () => {
     // ==== ELEMENTO DA ESPORTARE ====
     const element = document.getElementById('pdfWrapper');  // <-- wrapper con titolo + riepilogo
 
-const opt = {
-  margin:       5,
-  filename:     fileName,
-  image:        { type: 'jpeg', quality: 0.98 },
-  html2canvas:  { scale: 1.5, useCORS: true, scrollY: 0 },
-  jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-  pagebreak:    { mode: ['css', 'legacy'] }
-};
+    const opt = {
+      margin:       5,
+      filename:     fileName,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 1.5, useCORS: true, scrollY: 0 },
+      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak:    { mode: ['css', 'legacy'] }
+    };
 
-window.scrollTo(0, 0);
+    // porta la pagina in alto prima di "fotografare"
+    window.scrollTo(0, 0);
 
-const worker  = html2pdf().set(opt).from(element).toPdf();
-const pdfBlob = await worker.output('blob');
+    // genera il PDF come Blob
+    const worker  = html2pdf().set(opt).from(element).toPdf();
+    const pdfBlob = await worker.output('blob');
 
-const pdfBase64 = await blobToBase64(pdfBlob);
+    // Blob → base64
+    const pdfBase64 = await blobToBase64(pdfBlob);
 
     // ==== INVIO CON FORM (NESSUN CORS) → SU IFRAME NASCOSTO ====
     const form = document.createElement('form');
     form.method = 'POST';
     form.action = WEBAPP_URL;
-    form.target = 'hidden_iframe';  // 👈 QUI il trucco: niente nuova scheda
+    form.target = 'hidden_iframe';  // niente nuova scheda
 
     function addField(name, value) {
       const input = document.createElement('input');
