@@ -101,10 +101,8 @@
     }
   }
 #pdfWrapper{
-  max-width: 900px;     /* più stretto: evita taglio del bordo */
-  margin: 0 auto;
-  padding: 20px;         /* margine interno per bel bordo */
-  box-sizing: border-box;
+  max-width:1100px;
+  margin:0 auto;
 }
 
 .card{
@@ -1739,7 +1737,7 @@ document.getElementById('printBtn').addEventListener('click', async () => {
     const element = document.getElementById('pdfWrapper');  // <-- wrapper con titolo + riepilogo
 
     const opt = {
-      margin:       5,
+      margin:       12,
       filename:     fileName,
       image:        { type: 'jpeg', quality: 0.98 },
       html2canvas:  { scale: 1.5, useCORS: true, scrollY: 0 },
