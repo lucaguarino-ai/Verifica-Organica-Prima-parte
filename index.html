@@ -100,10 +100,15 @@
       display:block !important;
     }
   }
+#pdfWrapper{
+  max-width:1100px;
+  margin:0 auto;
+}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
 <body>
+<div id="pdfWrapper">
 <h1>Verifica di chimica organica – Alcani, Alcheni, Alchini</h1>
 <div id="studentInfoBar"></div>
 
@@ -293,6 +298,8 @@ const fmtTime=d=>d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})
 let examActive = false;
 let summaryActive = false;
 let summaryUnlocked = false;
+let pdfAlreadySent = false;
+const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbycEntB7f6f-oomlmD2kzr9oKTaBfm6o0UA1TBZQByfr27kxhx7eTjvAKiXaSyBgx3irg/exec";
 
 window.addEventListener('beforeunload', (e)=>{
   if (examActive || (summaryActive && !summaryUnlocked)) {
@@ -1678,88 +1685,92 @@ pinInput.addEventListener('keydown', (e)=>{
   if (e.key === 'Enter') document.getElementById('pinOk').click();
 });
 
-document.getElementById('printBtn').addEventListener('click', async ()=>{
+document.getElementById('printBtn').addEventListener('click', async () => {
+  // 1) Se il riepilogo non è sbloccato, fermati
   if (!summaryUnlocked){
-    alert('Inserisci il PIN per sbloccare il riepilogo.');
-    pinOverlay.style.display='flex';
-    document.getElementById('resultSection').style.filter='blur(6px)';
-    document.getElementById('resultSection').style.pointerEvents='none';
-    pinInput.focus();
+    alert('Inserisci prima il PIN per sbloccare il riepilogo.');
+    return;
+  }
+
+  // 2) Se è già stato inviato, NON inviare di nuovo
+  if (pdfAlreadySent) {
+    alert('La verifica è già stata inviata. Non è possibile inviarla una seconda volta.');
     return;
   }
 
   try {
+    // ==== DATI STUDENTE ====
     const nome    = (document.getElementById('nome').value    || '').trim();
     const cognome = (document.getElementById('cognome').value || '').trim();
     const classe  = (document.getElementById('classe').value  || '').trim();
     const dataRaw = (document.getElementById('data').value    || '').trim();
-    const dataStr = dataRaw ? dataRaw.replace(/\//g,'-') : '';
 
-    // Nome file: Verifica_3A_Rossi_Mario_19-11-2025.pdf
-    const safeClasse = classe || 'Classe';
-    const safeCogn   = cognome || 'Cognome';
-    const safeNome   = nome   || 'Nome';
-    const safeData   = dataStr || 'Data';
+    const dataStr    = dataRaw ? dataRaw.replace(/\//g,'-') : '';
+    const safeClasse = classe   || 'Classe';
+    const safeCogn   = cognome  || 'Cognome';
+    const safeNome   = nome     || 'Nome';
+    const safeData   = dataStr  || 'Data';
 
     const fileName = `Verifica_${safeClasse}_${safeCogn}_${safeNome}_${safeData}.pdf`;
 
-    const element = document.getElementById('resultSection');
+    // ==== ELEMENTO DA ESPORTARE ====
+    const element = document.getElementById('pdfWrapper');  // <-- wrapper con titolo + riepilogo
 
-    const opt = {
-      margin:       10,
-      filename:     fileName,
-      image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2 },
-      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    };
+    const element = document.getElementById('pdfWrapper');
 
-    // Genera il PDF come Blob usando la sequenza compatibile con html2pdf 0.10.1
-    const pdfBlob = await new Promise((resolve, reject) => {
-      html2pdf().set(opt).from(element).toPdf().get('pdf').then(pdf => {
-        try {
-          const blob = pdf.output('blob');
-          resolve(blob);
-        } catch (e) {
-          reject(e);
-        }
-      }).catch(reject);
-    });
+const opt = {
+  margin:       5,
+  filename:     fileName,
+  image:        { type: 'jpeg', quality: 0.98 },
+  html2canvas:  { scale: 1.5, useCORS: true, scrollY: 0 },
+  jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+  pagebreak:    { mode: ['css', 'legacy'] }
+};
 
-    // Blob → base64
-    const pdfBase64 = await blobToBase64(pdfBlob);
+window.scrollTo(0, 0);
 
-    // URL della tua WebApp Apps Script (quella /exec)
-    const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbycEntB7f6f-oomlmD2kzr9oKTaBfm6o0UA1TBZQByfr27kxhx7eTjvAKiXaSyBgx3irg/exec";
+const worker  = html2pdf().set(opt).from(element).toPdf();
+const pdfBlob = await worker.output('blob');
 
-    // Invece di fetch → uso un form POST nascosto (niente CORS)
-const form = document.createElement('form');
-form.method = 'POST';
-form.action = WEBAPP_URL;
-// se vuoi che la risposta "File caricato correttamente" si apra in una nuova scheda:
-form.target = '_blank';
+const pdfBase64 = await blobToBase64(pdfBlob);
 
-// aggiungo i campi come input nascosti
-function addField(name, value) {
-  const input = document.createElement('input');
-  input.type  = 'hidden';
-  input.name  = name;
-  input.value = value;
-  form.appendChild(input);
-}
+    // ==== INVIO CON FORM (NESSUN CORS) → SU IFRAME NASCOSTO ====
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = WEBAPP_URL;
+    form.target = 'hidden_iframe';  // 👈 QUI il trucco: niente nuova scheda
 
-// qui passo gli stessi dati che prima mandavamo nel JSON
-addField('pdfBase64', pdfBase64);
-addField('fileName', fileName);
-addField('classe',  safeClasse);
-addField('studente', `${safeNome} ${safeCogn}`);
+    function addField(name, value) {
+      const input = document.createElement('input');
+      input.type  = 'hidden';
+      input.name  = name;
+      input.value = value;
+      form.appendChild(input);
+    }
 
-// aggiungo il form alla pagina, invio, e poi lo rimuovo
-document.body.appendChild(form);
-form.submit();
-document.body.removeChild(form);
+    addField('pdfBase64', pdfBase64);
+    addField('fileName',  fileName);
+    addField('classe',    safeClasse);
+    addField('studente',  `${safeNome} ${safeCogn}`);
 
-// Messaggio all’utente
-alert('Verifica inviata al docente (salvata su Drive).');
+    document.body.appendChild(form);
+    form.submit();
+    document.body.removeChild(form);
+
+    // Segna che la verifica è stata inviata
+    pdfAlreadySent = true;
+
+    // Disabilita il bottone e cambia testo
+    const btn = document.getElementById('printBtn');
+    if (btn){
+      btn.disabled = true;
+      btn.textContent = 'Verifica inviata';
+      btn.style.opacity = '0.7';
+      btn.style.cursor  = 'default';
+    }
+
+    // Messaggio di conferma per l’utente
+    alert('Verifica inviata al docente (salvata su Drive).');
 
   } catch (err){
     console.error('Errore generazione/invio PDF:', err);
@@ -2403,6 +2414,6 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
   }
 });
 </script>
-
+<iframe name="hidden_iframe" style="display:none;"></iframe>
 </body>
 </html>
