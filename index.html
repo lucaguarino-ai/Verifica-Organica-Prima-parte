@@ -2201,6 +2201,7 @@ function scoreQ3(atoms, adj, numsArr){
 }
 
 document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
+
   const sicuro = confirm('Sei sicuro di voler consegnare la verifica?\nPremi "OK" per consegnare o "Annulla" per tornare indietro.');
   if (!sicuro) return;
 
@@ -2238,11 +2239,7 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
         const corr = ({"alcano.jpg":"3,5dietil-3,5dimetilottano","alchene.jpg":"5etil-3metil-4ottene","alchino.jpg":"4Br-6Cl-4etil-2eptino","diene.jpg":"trans 3Cl-4etil-3eptene","benzene.jpg":"4Br-2Cl-1etilcicloesano"})[file] || '';
         const sED  = simFine(userTxt, corr);
         const sNLP = nlpSimilarity(userTxt, corr);
-        let sText  = Math.max(sED, sNLP);
-
-                   // penalità leggera per simboli di elementi (Br, Cl, F, I) scritti in minuscolo
-        const pen = elementCasePenalty(userTxt);
-        sText = Math.max(0, sText - pen);
+        const sText = Math.max(sED, sNLP);
 
         const key = (window.answerKeys||{})[file];
         const studOverlay = await studentOverlayOnlyPNG(file).catch(()=> '');
@@ -2256,7 +2253,7 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
           sVisRaw = 0;
         }
 
-        const sVisAdj = calibrateVisual(sVisRaw, file);
+        const sVisAdj = calibrateVisual(sVisRaw);
         const visScore = sVisAdj;
 
         const pts = +((sText*(window.W_TEXT||1) + visScore*(window.W_VIS||1))).toFixed(2);
@@ -2267,14 +2264,14 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
         const card = document.createElement('div'); card.className='card';
         const txt = document.createElement('div');
         const badgeTxt = sText>=0.9?'ok':(sText>=0.5?'warn':'err');
-        const badgeVis = sVisAdj>=0.9?'ok':(sVisAdj>=0.5?'warn':'err');
+        const badgeVis = visScore>=0.9?'ok':(visScore>=0.5?'warn':'err');
 
         txt.innerHTML = `
           <div><strong>${esc(file.replace('.jpg',''))}</strong></div>
           <div>🧠 Sezione 1 (max 2):
             <span class="badge ${badgeTxt}" title="testo">${(sText*(window.W_TEXT||1)).toFixed(2)} / ${(window.W_TEXT||1)}</span>
             +
-            <span class="badge ${badgeVis}" title="overlay visivo">${(sVisAdj*(window.W_VIS||1)).toFixed(2)} / ${(window.W_VIS||1)}</span>
+            <span class="badge ${badgeVis}" title="overlay visivo">${(visScore*(window.W_VIS||1)).toFixed(2)} / ${(window.W_VIS||1)}</span>
             =
             <span class="badge ${pts>=1.5?'ok':(pts>=1?'warn':'err')}">${pts.toFixed(2)} / 2.00</span>
           </div>
@@ -2309,24 +2306,15 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
       }
     }
 
-    /* ===== Sezione 2 – VALUTAZIONE STRUTTURALE ===== */
+    /* ===== Sezione 2 ===== */
     let puntiSec2=0;
     const cont2 = document.getElementById('riepilogoCostru');
     cont2.innerHTML='';
 
     const questions=[
-      {
-        testo:"Costruisci: 3,3-dibromo-1,1,5,5-tetracloropentano",
-        correctImg:["costruzione_1_corretto_A.png","costruzione_1_corretto_B.png"]
-      },
-      {
-        testo:"Costruisci: 1-cloro-4,4-dimetil-2-esino",
-        correctImg:["costruzione_2_corretto_A.png","costruzione_2_corretto_B.png"]
-      },
-      {
-        testo:"Costruisci: 1-bromo-3-etil-4-metil-3-esene",
-        correctImg:["costruzione_3_corretto_A.png","costruzione_3_corretto_B.png"]
-      }
+      {testo:"Costruisci: 3,3-dibromo-1,1,5,5-tetracloropentano", correctImg:["costruzione_1_corretto_A.png","costruzione_1_corretto_B.png"]},
+      {testo:"Costruisci: 1-cloro-4,4-dimetil-2-esino",            correctImg:["costruzione_2_corretto_A.png","costruzione_2_corretto_B.png"]},
+      {testo:"Costruisci: 1-bromo-3-etil-4-metil-3-esene",         correctImg:["costruzione_3_corretto_A.png","costruzione_3_corretto_B.png"]}
     ];
 
     for (let idx=0; idx<questions.length; idx++){
@@ -2340,16 +2328,25 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
         const numsArr   = (payload && Array.isArray(payload.numbers2)) ? payload.numbers2 : [];
         const hasAnyContent = (piecesArr.length > 0) || (numsArr.length > 0);
 
-        let pts = 0;
-        if (hasAnyContent){
-          const {atoms, adj} = buildAtomGraph(piecesArr);
+        let studPNG = '';
+        try{ if (payload) studPNG = renderBuildSnapshot(payload, 800, 500); }catch(_){ studPNG=''; }
 
-          if (idx === 0)       pts = scoreQ1(atoms, adj, numsArr);
-          else if (idx === 1)  pts = scoreQ2(atoms, adj, numsArr);
-          else if (idx === 2)  pts = scoreQ3(atoms, adj, numsArr);
-        }
+        let sOverlayRaw = 0;
+        try{
+          const sols = q.correctImg;
+          if (studPNG && sols){
+            const res2 = await bestOverlapFromList(studPNG, Array.isArray(sols)? sols : [sols]);
+            sOverlayRaw = res2.score;
+          }
+        }catch(_){ sOverlayRaw = 0; }
 
-        pts = +pts.toFixed(2);
+        const sOverlayAdj = calibrateVisual(sOverlayRaw);
+
+        let baseScore = sOverlayAdj;
+        if (!hasAnyContent) baseScore = 0;
+
+        // soft numerazione se hai già quella logica, altrimenti lascialo semplice:
+        const pts = +baseScore.toFixed(2);
         puntiSec2 += pts;
 
         const card = document.createElement('div'); card.className='card';
@@ -2361,26 +2358,21 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
           <div>⚗️ Costruzione (max 1): <span class="badge ${badge}">${pts} / 1</span></div>
         `;
 
-        // Mostro comunque lo snapshot dello studente, per correzione a video
         const imgs = document.createElement('div'); imgs.className='wide';
-        let studPNG = '';
-        try{ if (payload) studPNG = renderBuildSnapshot(payload, 800, 500); }catch(_){ studPNG=''; }
         if (studPNG){
           const i1=new Image(); i1.src=studPNG; i1.alt='Soluzione studente'; imgs.appendChild(i1);
         }
 
-        // Immagini di riferimento del docente
-        const sols = Array.isArray(q.correctImg) ? q.correctImg : (q.correctImg ? [q.correctImg] : []);
-        sols.forEach((url, iSol)=>{
-          if (!url) return;
-          const ref = new Image();
-          ref.src = url;
-          ref.alt = 'Soluzione corretta ' + (iSol+1);
-          imgs.appendChild(ref);
+        const refList2 = Array.isArray(q.correctImg)? q.correctImg : [q.correctImg];
+        refList2.forEach((url,idx2)=>{
+          if(!url) return;
+          const sol=new Image();
+          sol.src=url;
+          sol.alt='Soluzione corretta '+(idx2+1);
+          imgs.appendChild(sol);
         });
 
-        card.appendChild(txt); 
-        card.appendChild(imgs);
+        card.appendChild(txt); card.appendChild(imgs);
         cont2.appendChild(card);
       }catch(err){
         console.warn('[Sez2] domanda', idx+1, err);
@@ -2398,8 +2390,10 @@ document.getElementById('consegnaBtn').addEventListener('click', async ()=>{
       </div>
     `;
 
+    // mostra riepilogo
     document.getElementById('resultSection').style.display='block';
 
+    // blocca con PIN
     pinErr.textContent = '';
     pinInput.value = '';
     pinOverlay.style.display='flex';
