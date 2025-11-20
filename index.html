@@ -104,6 +104,20 @@
   max-width:1100px;
   margin:0 auto;
 }
+
+.card{
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  h3, h4{
+    page-break-after: avoid;
+  }
+
+.pdf-page-break{
+    page-break-before: always;
+    break-before: always;
+  }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
@@ -239,8 +253,14 @@
 <div class="section" id="resultSection" style="display:none;">
   <h3>Riepilogo verifica</h3>
   <div id="anagrafica"></div><hr/>
-  <h4>Sezione 1 – Annotazione</h4><div id="riepilogoAnnota"></div>
-  <h4>Sezione 2 – Costruzione</h4><div id="riepilogoCostru"></div>
+  <h4>Sezione 1 – Annotazione</h4>
+<div id="riepilogoAnnota"></div>
+
+<!-- 👇 Forza nuova pagina tra Sez.1 e Sez.2 -->
+<div class="pdf-page-break"></div>
+
+<h4>Sezione 2 – Costruzione</h4>
+<div id="riepilogoCostru"></div>
   <h4>Totale</h4><div id="totali"></div>
   <div class="space-between">
     <button id="homeBtn">🏠 Torna all’inizio (azzera tutto)</button>
