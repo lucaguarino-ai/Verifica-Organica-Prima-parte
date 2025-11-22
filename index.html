@@ -100,9 +100,12 @@
       display:block !important;
     }
   }
+/* Wrapper usato SOLO per il riepilogo/PDF */
 #pdfWrapper{
-  max-width:1100px;
-  margin:0 auto;
+  max-width: 850px;      /* più stretto → il bordo rientra nella pagina PDF */
+  margin: 0 auto;
+  padding: 10px;         /* un po' di respiro interno */
+  box-sizing: border-box;
 }
 
 .card{
@@ -1737,7 +1740,7 @@ document.getElementById('printBtn').addEventListener('click', async () => {
     const element = document.getElementById('pdfWrapper');  // <-- wrapper con titolo + riepilogo
 
     const opt = {
-      margin:       12,
+      margin:       10,
       filename:     fileName,
       image:        { type: 'jpeg', quality: 0.98 },
       html2canvas:  { scale: 1.5, useCORS: true, scrollY: 0 },
